@@ -191,6 +191,9 @@ function formatDuration(seconds) {
           <div class="flex items-center justify-between">
             <span class="text-xs text-gray-400"><%= formatFileSize(video.file_size) %></span>
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button class="text-gray-400 hover:text-blue-400 p-1" title="Turbo Optimize for Streaming" onclick="event.stopPropagation(); optimizeVideo('<%= video.id %>', '<%= video.title.replace(/'/g, "\\'") %>')">
+                <i class="ti ti-rocket text-sm"></i>
+              </button>
               <button class="text-gray-400 hover:text-white p-1" onclick="event.stopPropagation(); showRenameDialog('<%= video.id %>', '<%= video.title %>')">
                 <i class="ti ti-pencil text-sm"></i>
               </button>
@@ -277,6 +280,11 @@ function formatDuration(seconds) {
               <td class="px-4 py-3 text-sm text-gray-400"><%= new Date(video.upload_date).toLocaleDateString() %></td>
               <td class="px-4 py-3 text-right">
                 <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-blue-400 transition-colors"
+                    title="Turbo Optimize for Streaming"
+                    onclick="event.stopPropagation(); optimizeVideo('<%= video.id %>', '<%= video.title.replace(/'/g, "\\'") %>')">
+                    <i class="ti ti-rocket text-sm"></i>
+                  </button>
                   <button class="p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors"
                     onclick="event.stopPropagation(); showRenameDialog('<%= video.id %>', '<%= video.title %>')">
                     <i class="ti ti-pencil text-sm"></i>
@@ -785,6 +793,37 @@ async function showRenameFolderDialog(folderId, currentName) {
     }
   } catch (error) {
     showToast('error', 'An error occurred while renaming the folder');
+  }
+}
+
+async function optimizeVideo(videoId, videoTitle) {
+  const result = await createModalDialog({
+    type: 'info',
+    icon: 'ti-rocket',
+    title: 'Turbo Optimize',
+    message: `Optimize "${videoTitle}" for Excellent Quality streaming with near-zero CPU usage? This will create a new optimized version of your video.`,
+    confirmText: 'Start Optimization',
+    confirmClass: 'bg-blue-500 hover:bg-blue-600'
+  });
+  if (result.confirmed) {
+    try {
+      showToast('info', 'Optimization started in the background...');
+      const response = await fetch(`/api/videos/${videoId}/optimize`, { 
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.querySelector('input[name="_csrf"]')?.value || ''
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast('success', 'Video is being optimized. It will appear in your gallery soon!');
+      } else {
+        showToast('error', data.error || 'Failed to start optimization');
+      }
+    } catch (error) {
+      showToast('error', 'An error occurred while starting optimization');
+    }
   }
 }
 

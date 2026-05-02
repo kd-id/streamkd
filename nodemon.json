@@ -1,0 +1,24 @@
+{
+  "verbose": true,
+  "ignore": [
+    "public/*",
+    "views/*",
+    "logs/*",
+    "scratch/*",
+    "scripts/*",
+    "node_modules/*",
+    ".git/*",
+    "*.sqlite",
+    "*.db"
+  ],
+  "watch": [
+    "app.js",
+    "services/",
+    "middleware/",
+    "models/",
+    "utils/",
+    ".env"
+  ],
+  "ext": "js,json",
+  "delay": "1000"
+}

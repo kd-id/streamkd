@@ -58,8 +58,37 @@ const generateImageThumbnail = (imagePath, thumbnailName) => {
   });
 };
 
+const optimizeVideo = (videoPath, outputPath) => {
+  return new Promise((resolve, reject) => {
+    ffmpeg(videoPath)
+      .outputOptions([
+        '-c:v libx264',
+        '-preset superfast',
+        '-profile:v main',
+        '-level 4.1',
+        '-pix_fmt yuv420p',
+        '-g 60',
+        '-r 30',
+        '-c:a aac',
+        '-b:a 128k',
+        '-ar 44100',
+        '-threads 1' // Keep it low priority
+      ])
+      .output(outputPath)
+      .on('end', () => {
+        resolve(outputPath);
+      })
+      .on('error', (err) => {
+        console.error('Error optimizing video:', err);
+        reject(err);
+      })
+      .run();
+  });
+};
+
 module.exports = {
   getVideoInfo,
   generateThumbnail,
-  generateImageThumbnail
+  generateImageThumbnail,
+  optimizeVideo
 };

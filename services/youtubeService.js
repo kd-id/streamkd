@@ -18,6 +18,25 @@ function omitUndefined(value) {
   );
 }
 
+function mapToYoutubeResolution(resolution) {
+  if (!resolution) return '1080p';
+  const res = resolution.toString();
+  if (res.includes('3840') || res.includes('2160')) return '2160p';
+  if (res.includes('2560') || res.includes('1440')) return '1440p';
+  if (res.includes('1920') || res.includes('1080')) return '1080p';
+  if (res.includes('1280') || res.includes('720')) return '720p';
+  if (res.includes('854') || res.includes('480')) return '480p';
+  if (res.includes('640') || res.includes('360')) return '360p';
+  if (res.includes('426') || res.includes('240')) return '240p';
+  return '1080p';
+}
+
+function mapToYoutubeFPS(fps) {
+  const fpsNum = parseInt(fps);
+  if (isNaN(fpsNum)) return '30fps';
+  return fpsNum >= 60 ? '60fps' : '30fps';
+}
+
 async function syncBroadcastMonetization(youtube, broadcastId, enabled) {
   const broadcastResponse = await youtube.liveBroadcasts.list({
     part: 'id,snippet,contentDetails,status,monetizationDetails',
@@ -152,10 +171,18 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
 
   const tagsArray = stream.youtube_tags ? stream.youtube_tags.split(',').map(t => t.trim()).filter(t => t) : [];
 
+  let scheduledStartTime = new Date().toISOString();
+  if (stream.schedule_time) {
+    const scheduleDate = new Date(stream.schedule_time);
+    if (scheduleDate.getTime() > Date.now()) {
+      scheduledStartTime = scheduleDate.toISOString();
+    }
+  }
+
   const broadcastSnippet = {
     title: stream.title,
     description: stream.youtube_description || '',
-    scheduledStartTime: new Date().toISOString()
+    scheduledStartTime
   };
 
   console.log(`[YouTubeService] Creating YouTube broadcast for stream ${streamId}`);
@@ -250,9 +277,9 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
         title: `${stream.title} - Stream`
       },
       cdn: {
-        frameRate: '30fps',
+        frameRate: mapToYoutubeFPS(stream.fps),
         ingestionType: 'rtmp',
-        resolution: '1080p'
+        resolution: mapToYoutubeResolution(stream.resolution)
       },
       contentDetails: {
         isReusable: false
@@ -290,6 +317,47 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
   };
 }
 
+async function stopYouTubeBroadcast(streamId) {
+  try {
+    const stream = await Stream.findById(streamId);
+    if (!stream || !stream.is_youtube_api || !stream.youtube_broadcast_id) {
+      return { success: true };
+    }
+
+    const User = require('../models/User');
+    const YoutubeChannel = require('../models/YoutubeChannel');
+    const user = await User.findById(stream.user_id);
+    const channel = await YoutubeChannel.findByExternalId(stream.youtube_channel_external_id, stream.user_id);
+    
+    if (!channel || !channel.access_token) return { success: false, error: 'Channel not found' };
+
+    const oauth2Client = getYouTubeOAuth2Client(
+      process.env.YOUTUBE_CLIENT_ID,
+      process.env.YOUTUBE_CLIENT_SECRET,
+      process.env.YOUTUBE_REDIRECT_URI
+    );
+
+    oauth2Client.setCredentials({
+      access_token: decrypt(channel.access_token),
+      refresh_token: channel.refresh_token ? decrypt(channel.refresh_token) : undefined
+    });
+
+    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+    await youtube.liveBroadcasts.transition({
+      part: 'id,status',
+      id: stream.youtube_broadcast_id,
+      broadcastStatus: 'complete'
+    });
+
+    console.log(`[YouTubeService] Transitioned broadcast ${stream.youtube_broadcast_id} to complete`);
+    return { success: true };
+  } catch (error) {
+    console.error('[YouTubeService] Error stopping YouTube broadcast:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 async function deleteYouTubeBroadcast(streamId) {
   try {
     loggedAlreadyHasBroadcast.delete(streamId);
@@ -316,6 +384,9 @@ async function deleteYouTubeBroadcast(streamId) {
 module.exports = {
   createYouTubeBroadcast,
   deleteYouTubeBroadcast,
+  stopYouTubeBroadcast,
   getYouTubeOAuth2Client,
-  syncBroadcastMonetization
+  syncBroadcastMonetization,
+  mapToYoutubeResolution,
+  mapToYoutubeFPS
 };

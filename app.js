@@ -1,4 +1,5 @@
 const path = require('path');
+const axios = require('axios');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const fs = require('fs');
@@ -35,6 +36,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const streamingService = require('./services/streamingService');
 const schedulerService = require('./services/schedulerService');
+const AIService = require('./services/aiService');
 const packageJson = require('./package.json');
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 process.on('unhandledRejection', (reason, promise) => {
@@ -706,6 +708,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     res.redirect('/login');
   }
 });
+
 function normalizeFolderId(folderId) {
   if (folderId === undefined || folderId === null || folderId === '' || folderId === 'root' || folderId === 'null') {
     return null;
@@ -958,7 +961,8 @@ app.get('/settings', isAuthenticated, async (req, res) => {
     
     res.render('settings', {
       title: 'Settings',
-      active: 'settings',
+      active: req.query.tab === 'ai' ? 'ai-settings' : 'settings',
+      activeTab: req.query.tab || 'profile',
       user: user,
       appVersion: packageJson.version,
       youtubeClientId: user.youtube_client_id || '',
@@ -2199,6 +2203,49 @@ app.post('/api/videos/:id/rename', isAuthenticated, [
     res.status(500).json({ error: 'Failed to rename video' });
   }
 });
+
+app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    if (video.user_id !== req.session.userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const videoProcessor = require('./utils/videoProcessor');
+    const inputPath = path.join(__dirname, 'public', video.filepath);
+    const outputFilename = `optimized_${Date.now()}_${path.basename(video.filepath)}`;
+    const outputRelPath = path.join(path.dirname(video.filepath), outputFilename).replace(/\\/g, '/');
+    const outputPath = path.join(__dirname, 'public', outputRelPath);
+
+    // Run in background
+    res.json({ success: true, message: 'Optimization started' });
+
+    videoProcessor.optimizeVideo(inputPath, outputPath)
+      .then(async () => {
+        const stats = fs.statSync(outputPath);
+        await Video.create({
+          user_id: video.user_id,
+          title: `[Optimized] ${video.title}`,
+          filepath: outputRelPath,
+          thumbnail_path: video.thumbnail_path,
+          file_size: stats.size,
+          duration: video.duration,
+          folder_id: video.folder_id,
+          format: 'mp4',
+          resolution: '1280x720',
+          bitrate: 2500,
+          fps: 30
+        });
+        console.log(`[Optimization] Success: ${video.title}`);
+      })
+      .catch(err => {
+        console.error(`[Optimization] Failed: ${video.title}`, err);
+      });
+
+  } catch (error) {
+    console.error('Error starting optimization:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
   try {
     const videoId = req.params.videoId;
@@ -2483,6 +2530,125 @@ app.delete('/api/settings/recaptcha', isAuthenticated, async (req, res) => {
   }
 });
 
+// AI Configuration & Generation Routes
+app.get('/api/ai/config', isAuthenticated, async (req, res) => {
+  try {
+    const config = await AIService.getConfig();
+    res.json({ success: true, config: config || { providers: [] } });
+  } catch (error) {
+    console.error('Error getting AI config:', error);
+    res.status(500).json({ success: false, error: 'Failed to get AI config' });
+  }
+});
+
+app.post('/api/ai/config', isAuthenticated, async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    if (user.user_role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+    
+    // Handle both { config: ... } and { providers: ... } formats
+    const newConfig = req.body.config || { providers: req.body.providers };
+    
+    if (!newConfig.providers) {
+      return res.status(400).json({ success: false, error: 'Invalid configuration: providers missing' });
+    }
+
+    // Merge with existing config to preserve metadata like lastProviderIndex
+    const currentConfig = await AIService.getConfig() || {};
+    const finalConfig = {
+      ...currentConfig,
+      ...newConfig,
+      providers: newConfig.providers // Ensure providers are overwritten, not merged
+    };
+
+    await AIService.saveConfig(finalConfig);
+    res.json({ success: true, message: 'AI configuration saved successfully' });
+  } catch (error) {
+    console.error('Error saving AI config:', error);
+    res.status(500).json({ success: false, error: 'Failed to save AI config' });
+  }
+});
+
+app.post('/api/ai/test-key', isAuthenticated, async (req, res) => {
+  try {
+    const { providerType, key, keys, endpoint, model } = req.body;
+    const testProvider = { 
+        type: providerType, 
+        key: key || (keys && keys[0]), 
+        keys: keys,
+        endpoint, 
+        model 
+    };
+    
+    // Simple test by generating a tiny piece of text
+    const testKeyword = "test";
+    const prompt = `Say "API Key is valid" if you can read this.`;
+    
+    let result;
+    if (providerType === 'gemini') {
+        const url = endpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${testProvider.key}`;
+        const response = await axios.post(url, {
+            contents: [{ parts: [{ text: prompt }] }]
+        });
+        result = response.data.candidates[0].content.parts[0].text;
+    } else if (providerType === 'openai' || providerType === 'groq' || providerType === 'custom') {
+        const url = endpoint || (providerType === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions');
+        const response = await axios.post(url, {
+            model: model || 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }]
+        }, {
+            headers: { 'Authorization': `Bearer ${testProvider.key}` }
+        });
+        result = response.data.choices[0].message.content;
+    } else if (providerType === 'claude') {
+        const url = endpoint || 'https://api.anthropic.com/v1/messages';
+        const response = await axios.post(url, {
+            model: model || 'claude-3-haiku-20240307',
+            max_tokens: 10,
+            messages: [{ role: 'user', content: prompt }]
+        }, {
+            headers: { 
+                'x-api-key': testProvider.key,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json'
+            }
+        });
+        result = response.data.content[0].text;
+    }
+
+    res.json({ success: true, message: 'API Key is valid', result });
+  } catch (error) {
+    console.error('AI Key test error:', error.response?.data || error.message);
+    res.status(400).json({ success: false, error: error.response?.data?.error?.message || error.message });
+  }
+});
+
+app.post('/api/ai/models', isAuthenticated, async (req, res) => {
+  try {
+    const { type, key, endpoint } = req.body;
+    const models = await AIService.fetchModels(type, key, endpoint);
+    res.json({ success: true, models });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/ai/generate', isAuthenticated, async (req, res) => {
+  try {
+    const { keyword, category, isTheme, targetField } = req.body;
+    if (!keyword && !isTheme) {
+        return res.status(400).json({ success: false, error: 'Keyword is required' });
+    }
+    const variations = await AIService.generateMetadata(keyword, category, { isTheme, targetField });
+    res.json({ success: true, variations });
+  } catch (error) {
+    console.error('AI Generation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/settings/youtube-channels', isAuthenticated, async (req, res) => {
   try {
     const YoutubeChannel = require('./models/YoutubeChannel');
@@ -2506,29 +2672,47 @@ app.post('/api/settings/youtube-channel/:id/default', isAuthenticated, async (re
 });
 
 app.delete('/api/settings/youtube-channel/:id', isAuthenticated, async (req, res) => {
+  await handleChannelDisconnect(req, res);
+});
+
+// Post fallback for disconnect if DELETE is blocked
+app.post('/api/settings/youtube-channel/:id/disconnect', isAuthenticated, async (req, res) => {
+  await handleChannelDisconnect(req, res);
+});
+
+async function handleChannelDisconnect(req, res) {
   try {
     const YoutubeChannel = require('./models/YoutubeChannel');
     const channel = await YoutubeChannel.findById(req.params.id);
     
-    if (!channel || channel.user_id !== req.session.userId) {
-      return res.status(404).json({ success: false, error: 'Channel not found' });
+    console.log('[Settings] Channel disconnect attempt:', {
+      channelId: req.params.id,
+      userId: req.session.userId,
+      channelOwner: channel ? channel.user_id : 'not found'
+    });
+
+    if (!channel || String(channel.user_id) !== String(req.session.userId)) {
+      console.warn('[Settings] Disconnect unauthorized or channel not found');
+      return res.status(404).json({ success: false, error: 'Channel not found or unauthorized' });
     }
     
     await YoutubeChannel.delete(req.params.id, req.session.userId);
+    console.log('[Settings] Channel deleted from database');
     
     if (channel.is_default) {
       const channels = await YoutubeChannel.findAll(req.session.userId);
       if (channels.length > 0) {
         await YoutubeChannel.setDefault(req.session.userId, channels[0].id);
+        console.log('[Settings] New default channel set:', channels[0].id);
       }
     }
     
     res.json({ success: true, message: 'Channel disconnected successfully' });
   } catch (error) {
-    console.error('Error disconnecting channel:', error);
-    res.status(500).json({ success: false, error: 'Failed to disconnect channel' });
+    console.error('[Settings] Error disconnecting channel:', error);
+    res.status(500).json({ success: false, error: 'Failed to disconnect channel: ' + error.message });
   }
-});
+}
 
 const { google } = require('googleapis');
 

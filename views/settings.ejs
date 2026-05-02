@@ -9,27 +9,32 @@
   
   <div class="mb-6 border-b border-gray-700">
     <div class="flex flex-wrap -mb-px">
-      <button class="settings-tab active mr-2 py-2 px-4 text-blue-600 border-b-2 border-primary font-medium hover:text-blue-600 hover:border-blue-600"
+      <button class="settings-tab mr-2 py-2 px-4 font-medium transition-colors <%= activeTab === 'profile' ? 'active text-blue-600 border-b-2 border-primary' : 'text-gray-400 border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600' %>"
         data-tab="profile">
         <i class="ti ti-user mr-2"></i>Profile
       </button>
       <button
-        class="settings-tab mr-2 py-2 px-4 text-gray-400 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-600 font-medium"
+        class="settings-tab mr-2 py-2 px-4 font-medium transition-colors <%= activeTab === 'security' ? 'active text-blue-600 border-b-2 border-primary' : 'text-gray-400 border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600' %>"
         data-tab="security">
         <i class="ti ti-shield-lock mr-2"></i>Security
       </button>
       <button
-        class="settings-tab mr-2 py-2 px-4 text-gray-400 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-600 font-medium"
+        class="settings-tab mr-2 py-2 px-4 font-medium transition-colors <%= activeTab === 'integration' ? 'active text-blue-600 border-b-2 border-primary' : 'text-gray-400 border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600' %>"
         data-tab="integration">
         <i class="ti ti-plug mr-2"></i>Integration
       </button>
       <button
-        class="settings-tab mr-2 py-2 px-4 text-gray-400 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-600 font-medium"
+        class="settings-tab mr-2 py-2 px-4 font-medium transition-colors <%= activeTab === 'ai' ? 'active text-blue-600 border-b-2 border-primary' : 'text-gray-400 border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600' %>"
+        data-tab="ai">
+        <i class="ti ti-robot mr-2"></i>AI Integration
+      </button>
+      <button
+        class="settings-tab mr-2 py-2 px-4 font-medium transition-colors <%= activeTab === 'logs' ? 'active text-blue-600 border-b-2 border-primary' : 'text-gray-400 border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600' %>"
         data-tab="logs">
         <i class="ti ti-file-text mr-2"></i>Logs
       </button>
       <button
-        class="settings-tab mr-2 py-2 px-4 text-gray-400 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-600 font-medium"
+        class="settings-tab mr-2 py-2 px-4 font-medium transition-colors <%= activeTab === 'about' ? 'active text-blue-600 border-b-2 border-primary' : 'text-gray-400 border-b-2 border-transparent hover:text-blue-600 hover:border-blue-600' %>"
         data-tab="about">
         <i class="ti ti-info-circle mr-2"></i>About
       </button>
@@ -38,7 +43,7 @@
   
   <div>
     
-    <div id="profile-tab" class="settings-content">
+    <div id="profile-tab" class="settings-content <%= activeTab === 'profile' ? '' : 'hidden' %>">
       <div class="bg-gray-800 rounded-lg p-6">
         <h3 class="text-lg font-semibold mb-6">Profile Settings</h3>
         <form id="profile-form" class="space-y-6" action="/settings/profile" method="post"
@@ -351,7 +356,7 @@
                         <div class="flex items-center gap-3">
                           <div class="w-12 h-12 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
                             <% if (channel.channel_thumbnail) { %>
-                              <img src="<%= channel.channel_thumbnail %>" alt="Channel" class="w-full h-full object-cover">
+                              <img src="<%= channel.channel_thumbnail %>" alt="Channel" class="w-full h-full object-cover" referrerpolicy="no-referrer">
                             <% } else { %>
                               <div class="w-full h-full flex items-center justify-center bg-red-600">
                                 <i class="ti ti-brand-youtube text-white text-xl"></i>
@@ -432,6 +437,140 @@
               </div>
               <% } %>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ai-tab" class="settings-content <%= activeTab === 'ai' ? '' : 'hidden' %>">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <!-- LEFT: Provider & Auth -->
+        <div class="bg-gray-800 rounded-xl p-5 border border-gray-700/50">
+          <div class="flex items-center gap-2 mb-5">
+            <i class="ti ti-shield-lock text-primary"></i>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Provider & Auth</h3>
+          </div>
+
+          <!-- Provider Icon Grid -->
+          <div class="mb-4">
+            <label class="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              <i class="ti ti-cpu text-xs"></i> AI Provider
+            </label>
+            <div id="ai-provider-grid" class="grid grid-cols-4 gap-2">
+              <!-- Dynamically populated by JS -->
+            </div>
+          </div>
+
+          <!-- Selected Provider Badge & Toggle & Delete -->
+          <div class="flex items-center justify-between bg-dark-900 rounded-lg px-4 py-2.5 mb-5 border border-gray-700/50">
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
+                <i id="ai-badge-icon" class="ti ti-brand-google text-primary text-lg"></i>
+                <span id="ai-badge-name" class="text-sm font-medium text-white">Google Gemini</span>
+              </div>
+              <button type="button" id="delete-ai-provider-btn" onclick="deleteCurrentAIProvider()" class="hidden text-gray-500 hover:text-red-500 transition-colors" title="Delete Provider">
+                <i class="ti ti-trash"></i>
+              </button>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="ai-provider-active-toggle" class="sr-only peer" onchange="toggleProviderActive(this.checked)">
+              <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+              <span class="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-tight">Active</span>
+            </label>
+          </div>
+
+          <!-- Custom Endpoint -->
+          <div id="ai-endpoint-section" class="hidden mb-4">
+            <label class="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <i class="ti ti-link text-xs"></i> Custom Endpoint
+            </label>
+            <input type="text" id="ai-endpoint-input" class="w-full bg-dark-900 text-white text-sm rounded-lg px-4 py-2.5 focus:ring-1 focus:ring-primary border border-gray-700 placeholder-gray-500" placeholder="https://api.example.com/v1/chat/completions">
+          </div>
+
+          <!-- ADD API KEY -->
+          <div class="mb-4">
+            <label class="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <i class="ti ti-key text-xs"></i> Add API Key
+              <span class="text-gray-600 normal-case font-normal">(paste one or more keys)</span>
+            </label>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <input type="password" id="ai-new-key-input" class="w-full bg-dark-900 text-white text-sm rounded-lg pl-4 pr-10 py-2.5 focus:ring-1 focus:ring-primary border border-gray-700 placeholder-gray-500" placeholder="Paste key baru...">
+                <button type="button" onclick="toggleKeyVisibility('ai-new-key-input', this)" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors">
+                  <i class="ti ti-eye text-sm"></i>
+                </button>
+              </div>
+              <button type="button" onclick="addAISavedKey()" class="px-3 py-2.5 bg-primary hover:bg-blue-600 text-white rounded-lg transition-colors text-sm flex-shrink-0">
+                <i class="ti ti-plus"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- SAVED KEYS -->
+          <div class="mb-5">
+            <label id="ai-saved-keys-label" class="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <i class="ti ti-check text-green-500 text-xs"></i> Saved Keys (<span id="ai-keys-count">0</span>)
+            </label>
+            <div id="ai-saved-keys-list" class="space-y-2 max-h-48 overflow-y-auto">
+              <p class="text-xs text-gray-600 text-center py-3">No keys saved yet</p>
+            </div>
+          </div>
+
+          <!-- Save Configuration -->
+          <button type="button" onclick="saveAIConfiguration()" id="save-ai-config-btn" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium">
+            <i class="ti ti-device-floppy"></i>
+            <span>Save Configuration</span>
+          </button>
+        </div>
+
+        <!-- RIGHT: Model & Test -->
+        <div class="bg-gray-800 rounded-xl p-5 border border-gray-700/50">
+          <div class="flex items-center gap-2 mb-5">
+            <i class="ti ti-settings-2 text-primary"></i>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Model & Test</h3>
+          </div>
+
+          <!-- Model Section -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-3">
+              <label class="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <i class="ti ti-cpu text-xs"></i> Model
+              </label>
+              <button type="button" onclick="updateAIModelList()" id="update-model-btn" class="flex items-center gap-1.5 px-3 py-1 bg-dark-900 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg transition-colors text-xs border border-gray-700">
+                <i class="ti ti-refresh text-xs"></i>
+                <span>Update List</span>
+              </button>
+            </div>
+
+            <!-- Search Models -->
+            <div class="relative mb-3">
+              <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm"></i>
+              <input type="text" id="ai-model-search" class="w-full bg-dark-900 text-white text-sm rounded-lg pl-9 pr-4 py-2 focus:ring-1 focus:ring-primary border border-gray-700 placeholder-gray-500" placeholder="Search models..." oninput="filterAIModels()">
+            </div>
+
+            <!-- Model List -->
+            <div id="ai-model-list" class="space-y-1 max-h-[280px] overflow-y-auto rounded-lg bg-dark-900 border border-gray-700 p-1">
+              <p class="text-xs text-gray-600 text-center py-6">Add an API key and click "Update List" to load models</p>
+            </div>
+          </div>
+
+          <!-- Active Model -->
+          <div id="ai-active-model-display" class="flex items-center gap-2 bg-primary/10 rounded-lg px-4 py-2.5 mb-5 border border-primary/20">
+            <i class="ti ti-sparkles text-primary text-lg"></i>
+            <span class="text-sm text-white">Active: <strong id="ai-active-model-name" class="text-primary">Not selected</strong></span>
+          </div>
+
+          <!-- Test Connection -->
+          <div>
+            <label class="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              <i class="ti ti-wifi text-xs"></i> Test Connection
+            </label>
+            <button type="button" onclick="testAIConnection()" id="test-ai-connection-btn" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-dark-900 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm border border-gray-700">
+              <i class="ti ti-wifi"></i>
+              <span>Run Test</span>
+            </button>
+            <div id="ai-test-result" class="hidden mt-3 p-3 rounded-lg text-sm"></div>
           </div>
         </div>
       </div>
@@ -608,7 +747,7 @@
         });
       });
       const hashTab = window.location.hash.replace('#', '');
-      const validTabs = ['profile', 'security', 'integration', 'logs', 'about'];
+      const validTabs = ['profile', 'security', 'integration', 'ai', 'logs', 'about'];
       if (hashTab && validTabs.includes(hashTab)) {
         activateTab(hashTab);
       } else {
@@ -1094,7 +1233,8 @@
       }
   });
 
-  async function setDefaultChannel(channelId) {
+  // Global scope for onclick handlers
+  window.setDefaultChannel = async function(channelId) {
     try {
       const response = await fetch(`/api/settings/youtube-channel/${channelId}/default`, {
         method: 'POST',
@@ -1118,14 +1258,15 @@
     } catch (error) {
       showToast('error', 'Failed to update default channel');
     }
-  }
+  };
 
-  async function disconnectChannel(channelId, channelName) {
+  window.disconnectChannel = async function(channelId, channelName) {
     if (!confirm(`Are you sure you want to disconnect "${channelName}"?`)) return;
     
     try {
-      const response = await fetch(`/api/settings/youtube-channel/${channelId}`, {
-        method: 'DELETE',
+      console.log('Disconnecting channel:', channelId);
+      const response = await fetch(`/api/settings/youtube-channel/${channelId}/disconnect`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-Token': '<%= csrfToken %>'
@@ -1133,6 +1274,7 @@
       });
       
       const data = await response.json();
+      console.log('Disconnect response:', data);
       
       if (data.success) {
         showToast('success', 'Channel disconnected successfully');
@@ -1144,9 +1286,16 @@
         showToast('error', data.error || 'Failed to disconnect channel');
       }
     } catch (error) {
+      console.error('Disconnect error:', error);
       showToast('error', 'Failed to disconnect channel');
     }
-  }
+  };
+
+
+  </script>
+  <script>var _aiCsrf = '<%= csrfToken %>';</script>
+  <script src="/js/ai-settings.js?v=<%= Date.now() %>"></script>
+  <script>
 
   async function loadContributors() {
     const container = document.getElementById('contributors-container');

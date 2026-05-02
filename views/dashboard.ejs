@@ -267,7 +267,14 @@
                   </div>
                 </div>
                 <div>
-                  <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
+                  <div class="flex items-center justify-between mb-2">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Stream Title</label>
+                    <button type="button" onclick="generateAIField('manual', 'title')"
+                      class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                      <i class="ti ti-sparkles text-primary"></i>
+                      Generate AI
+                    </button>
+                  </div>
                   <input type="text"
                     class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
                     placeholder="Enter stream title..." name="streamTitle" id="streamTitle" required>
@@ -493,7 +500,7 @@
                         <span class="text-sm text-gray-300" id="ytSelectedVideo">Choose a video...</span>
                         <i class="ti ti-chevron-down text-gray-400"></i>
                       </button>
-                      <div id="ytVideoSelectorDropdown" class="hidden absolute z-10 mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
+                      <div id="ytVideoSelectorDropdown" class="hidden absolute z-[60] mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
                         <div class="p-2 border-b border-gray-600/50">
                           <div class="relative">
                             <input type="text" id="ytVideoSearchInput" class="w-full bg-dark-800 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700" placeholder="Search videos...">
@@ -506,14 +513,57 @@
                   </div>
                   <input type="hidden" id="ytSelectedVideoId" name="ytVideoId" value="">
 
-                  <div>
-                    <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
-                    <input type="text" id="ytStreamTitle" name="ytStreamTitle" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Enter stream title...">
+                  <!-- AI Theme Section -->
+                  <div class="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border border-purple-500/30 rounded-xl p-4 mb-6 relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                      <i class="ti ti-sparkles text-4xl text-purple-400"></i>
+                    </div>
+                    <div class="relative z-10">
+                      <div class="flex items-center justify-between mb-3">
+                        <label class="flex items-center gap-2 text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                          <i class="ti ti-wand text-purple-400"></i>
+                          AI Theme (Optional)
+                        </label>
+                        <button type="button" onclick="generateAllAI('youtube')" id="yt-generate-all-btn"
+                          class="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-purple-900/20 transition-all active:scale-95">
+                          <i class="ti ti-bolt"></i>
+                          Generate All
+                        </button>
+                      </div>
+                      <input type="text" id="ytAiTheme" 
+                        class="w-full bg-dark-900/60 text-white text-sm rounded-lg px-4 py-2 focus:ring-1 focus:ring-purple-500 border border-purple-500/20 placeholder-gray-500 mb-3" 
+                        placeholder="e.g. Cozy, Energetic, Chill, Aesthetic...">
+                      <div class="flex items-start gap-2">
+                        <i class="ti ti-bolt text-yellow-500 text-xs mt-0.5"></i>
+                        <p class="text-[10px] text-gray-400 leading-relaxed">
+                          Generate All fills title, description & tags sesuai tema + category dalam satu API request.
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Description</label>
-                    <textarea id="ytDescription" name="ytDescription" rows="3" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Stream Title</label>
+                      <button type="button" onclick="generateAIField('youtube', 'title')"
+                        class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                        <i class="ti ti-sparkles text-primary"></i>
+                        Generate AI
+                      </button>
+                    </div>
+                    <input type="text" id="ytStreamTitle" name="ytStreamTitle" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm" placeholder="Enter stream title...">
+                  </div>
+
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Description</label>
+                      <button type="button" onclick="generateAIField('youtube', 'description')"
+                        class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                        <i class="ti ti-sparkles text-primary"></i>
+                        Generate AI
+                      </button>
+                    </div>
+                    <textarea id="ytDescription" name="ytDescription" rows="3" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary resize-y min-h-[80px] text-sm" placeholder="Stream description..."></textarea>
                   </div>
 
                   <div class="grid grid-cols-2 gap-4">
@@ -541,9 +591,15 @@
                       </select>
                     </div>
                   </div>
-
-                  <div>
-                    <label class="text-sm font-medium text-white block mb-2">Tags</label>
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Tags</label>
+                      <button type="button" onclick="generateAIField('youtube', 'tags')"
+                        class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                        <i class="ti ti-sparkles text-primary"></i>
+                        Generate AI
+                      </button>
+                    </div>
                     <div id="ytTagsContainer" class="relative flex flex-wrap gap-2 p-2 bg-dark-700 border border-gray-600 rounded-lg min-h-[42px]">
                       <input type="text" id="ytTagsInput" class="flex-1 min-w-[100px] bg-transparent border-none outline-none text-white text-sm placeholder-gray-500" placeholder="Type and press Enter...">
                       <button type="button" onclick="clearYtTags()" class="absolute top-0 right-2 text-gray-400 hover:text-white transition-colors" title="Clear all tags">
@@ -606,7 +662,7 @@
                     <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer" onclick="document.getElementById('ytThumbnail').click()">
                       <input type="file" id="ytThumbnail" name="ytThumbnail" accept="image/*" class="hidden">
                       <div id="ytThumbnailPreview" class="hidden">
-                        <img id="ytThumbnailImg" src="" alt="Thumbnail" class="max-h-32 mx-auto rounded">
+                        <img id="ytThumbnailImg" src="" alt="Thumbnail" class="max-h-32 mx-auto rounded" referrerpolicy="no-referrer">
                       </div>
                       <div id="ytThumbnailPlaceholder">
                         <i class="ti ti-photo text-3xl text-gray-500 mb-2"></i>
@@ -747,7 +803,14 @@
                   </div>
                 </div>
                 <div>
-                  <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
+                  <div class="flex items-center justify-between mb-2">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Stream Title</label>
+                    <button type="button" onclick="generateAIField('edit-manual', 'title')"
+                      class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                      <i class="ti ti-sparkles text-primary"></i>
+                      Generate AI
+                    </button>
+                  </div>
                   <input type="text"
                     class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
                     placeholder="Enter stream title..." name="streamTitle" id="editStreamTitle" required>
@@ -973,7 +1036,7 @@
                         <span class="text-sm text-gray-300" id="editYtSelectedVideo">Choose a video...</span>
                         <i class="ti ti-chevron-down text-gray-400"></i>
                       </button>
-                      <div id="editYtVideoSelectorDropdown" class="hidden absolute z-10 mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
+                      <div id="editYtVideoSelectorDropdown" class="hidden absolute z-[60] mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
                         <div class="p-2 border-b border-gray-600/50">
                           <div class="relative">
                             <input type="text" id="editYtVideoSearchInput" class="w-full bg-dark-800 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700" placeholder="Search videos...">
@@ -986,14 +1049,57 @@
                   </div>
                   <input type="hidden" id="editYtSelectedVideoId" name="ytVideoId" value="">
 
-                  <div>
-                    <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
-                    <input type="text" id="editYtStreamTitle" name="ytStreamTitle" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Enter stream title...">
+                  <!-- AI Theme Section (Edit) -->
+                  <div class="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border border-purple-500/30 rounded-xl p-4 mb-6 relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                      <i class="ti ti-sparkles text-4xl text-purple-400"></i>
+                    </div>
+                    <div class="relative z-10">
+                      <div class="flex items-center justify-between mb-3">
+                        <label class="flex items-center gap-2 text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                          <i class="ti ti-wand text-purple-400"></i>
+                          AI Theme (Optional)
+                        </label>
+                        <button type="button" onclick="generateAllAI('edit-youtube')" id="edit-yt-generate-all-btn"
+                          class="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-purple-900/20 transition-all active:scale-95">
+                          <i class="ti ti-bolt"></i>
+                          Generate All
+                        </button>
+                      </div>
+                      <input type="text" id="editYtAiTheme" 
+                        class="w-full bg-dark-900/60 text-white text-sm rounded-lg px-4 py-2 focus:ring-1 focus:ring-purple-500 border border-purple-500/20 placeholder-gray-500 mb-3" 
+                        placeholder="e.g. Cozy, Energetic, Chill, Aesthetic...">
+                      <div class="flex items-start gap-2">
+                        <i class="ti ti-bolt text-yellow-500 text-xs mt-0.5"></i>
+                        <p class="text-[10px] text-gray-400 leading-relaxed">
+                          Generate All fills title, description & tags sesuai tema + category dalam satu API request.
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Description</label>
-                    <textarea id="editYtDescription" name="ytDescription" rows="3" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Stream Title</label>
+                      <button type="button" onclick="generateAIField('edit-youtube', 'title')"
+                        class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                        <i class="ti ti-sparkles text-primary"></i>
+                        Generate AI
+                      </button>
+                    </div>
+                    <input type="text" id="editYtStreamTitle" name="ytStreamTitle" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm" placeholder="Enter stream title...">
+                  </div>
+
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Description</label>
+                      <button type="button" onclick="generateAIField('edit-youtube', 'description')"
+                        class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                        <i class="ti ti-sparkles text-primary"></i>
+                        Generate AI
+                      </button>
+                    </div>
+                    <textarea id="editYtDescription" name="ytDescription" rows="3" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary resize-y min-h-[80px] text-sm" placeholder="Stream description..."></textarea>
                   </div>
 
                   <div class="grid grid-cols-2 gap-4">
@@ -1022,8 +1128,15 @@
                     </div>
                   </div>
 
-                  <div>
-                    <label class="text-sm font-medium text-white block mb-2">Tags</label>
+                  <div class="mt-4">
+                    <div class="flex items-center justify-between mb-2">
+                      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Tags</label>
+                      <button type="button" onclick="generateAIField('edit-youtube', 'tags')"
+                        class="px-2.5 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 border border-gray-700 transition-all active:scale-95">
+                        <i class="ti ti-sparkles text-primary"></i>
+                        Generate AI
+                      </button>
+                    </div>
                     <div id="editYtTagsContainer" class="relative flex flex-wrap gap-2 p-2 bg-dark-700 border border-gray-600 rounded-lg min-h-[42px]">
                       <input type="text" id="editYtTagsInput" class="flex-1 min-w-[100px] bg-transparent border-none outline-none text-white text-sm placeholder-gray-500" placeholder="Type and press Enter...">
                       <button type="button" onclick="clearEditYtTags()" class="absolute top-0 right-2 text-gray-400 hover:text-white transition-colors" title="Clear all tags">
@@ -1045,7 +1158,7 @@
                       <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-3 min-w-0">
                           <div class="w-10 h-10 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
-                            <img id="editYtChannelThumb" src="<%= typeof youtubeChannelThumbnail !== 'undefined' ? youtubeChannelThumbnail : '' %>" alt="Channel" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\'w-full h-full flex items-center justify-center bg-red-600\'><i class=\'ti ti-brand-youtube text-white text-xl\'></i></div>'">
+                            <img id="editYtChannelThumb" src="<%= typeof youtubeChannelThumbnail !== 'undefined' ? youtubeChannelThumbnail : '' %>" alt="Channel" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=YT&background=e53e3e&color=fff';">
                           </div>
                           <div class="min-w-0">
                             <p id="editYtChannelNameDisplay" class="font-medium text-white text-sm truncate"><%= typeof youtubeChannelName !== 'undefined' ? youtubeChannelName : 'YouTube Channel' %></p>
@@ -1064,7 +1177,7 @@
                     <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer" onclick="document.getElementById('editYtThumbnail').click()">
                       <input type="file" id="editYtThumbnail" name="editYtThumbnail" accept="image/*" class="hidden">
                       <div id="editYtThumbnailPreview" class="hidden">
-                        <img id="editYtThumbnailImg" src="" alt="Thumbnail" class="max-h-32 mx-auto rounded">
+                        <img id="editYtThumbnailImg" src="" alt="Thumbnail" class="max-h-32 mx-auto rounded" referrerpolicy="no-referrer">
                       </div>
                       <div id="editYtThumbnailPlaceholder">
                         <i class="ti ti-photo text-3xl text-gray-500 mb-2"></i>
@@ -1992,13 +2105,13 @@
       }
       let youtubeInfoHTML = '';
       if (youtubeConnected && stream.youtube_channel_name) {
-        youtubeInfoHTML = `<div class="flex items-center gap-1">${stream.youtube_channel_thumbnail ? `<img src="${stream.youtube_channel_thumbnail}" alt="" class="w-3 h-3 rounded-full object-cover">` : `<div class="w-3 h-3 rounded-full bg-red-600 flex items-center justify-center"><i class="ti ti-brand-youtube text-white text-[6px]"></i></div>`}<span class="text-[10px] text-gray-400">${stream.youtube_channel_name}</span></div>`;
+        youtubeInfoHTML = `<div class="flex items-center gap-1">${stream.youtube_channel_thumbnail ? `<img src="${stream.youtube_channel_thumbnail}" alt="" class="w-3 h-3 rounded-full object-cover" referrerpolicy="no-referrer">` : `<div class="w-3 h-3 rounded-full bg-red-600 flex items-center justify-center"><i class="ti ti-brand-youtube text-white text-[6px]"></i></div>`}<span class="text-[10px] text-gray-400">${stream.youtube_channel_name}</span></div>`;
       }
       card.innerHTML = `
       <div class="p-3">
         <div class="flex gap-3">
           <div class="relative flex-shrink-0 w-20 h-14 bg-dark-700 rounded overflow-hidden">
-            <img src="${thumbnail}" class="w-full h-full object-cover" alt="${stream.title}">
+            <img src="${thumbnail}" class="w-full h-full object-cover" alt="${stream.title}" referrerpolicy="no-referrer">
           </div>
           <div class="flex-1 min-w-0">
             <h4 class="text-sm font-medium text-white truncate leading-tight">${stream.title}</h4>
@@ -2019,6 +2132,11 @@
         <div>${statusBadge}</div>
         <div class="flex items-center gap-1.5">
           ${getActionButtonHTML(stream.status, stream.id, 'mobile')}
+          <button class="p-1 hover:bg-dark-700 rounded transition-colors" 
+                  title="Share stream link"
+                  onclick="shareStream('${stream.id}', '${stream.youtube_broadcast_id || ''}', '${stream.title.replace(/'/g, "\\'")}')">
+            <i class="ti ti-share text-blue-400 hover:text-white text-sm"></i>
+          </button>
           <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-edit text-gray-400 hover:text-white text-sm"></i></button>
           <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `deleteStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-trash text-gray-400 hover:text-red-400 text-sm"></i></button>
         </div>
@@ -2076,7 +2194,7 @@
       <td class="px-6 py-4 whitespace-nowrap">
         <div class="flex items-center">
           <div class="w-20 h-12 bg-dark-700 rounded flex-shrink-0 overflow-hidden mr-3">
-            <img src="${thumbnail}" class="w-full h-full object-cover" alt="${stream.title}">
+            <img src="${thumbnail}" class="w-full h-full object-cover" alt="${stream.title}" referrerpolicy="no-referrer">
           </div>
           <div class="min-w-0 flex-1">
             <div class="text-sm font-medium truncate max-w-[200px]" title="${stream.title}">${stream.title}</div>
@@ -2093,7 +2211,7 @@
            class="inline-flex items-center gap-1.5 hover:transition-colors group"
            title="${stream.youtube_channel_name}">
           ${stream.youtube_channel_thumbnail ? `
-          <img src="${stream.youtube_channel_thumbnail}" alt="" class="w-5 h-5 rounded-full object-cover">
+          <img src="${stream.youtube_channel_thumbnail}" alt="" class="w-5 h-5 rounded-full object-cover" referrerpolicy="no-referrer">
           ` : `
           <div class="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center">
             <i class="ti ti-brand-youtube text-white text-xs"></i>
@@ -2154,7 +2272,11 @@
       <td class="px-6 py-4 whitespace-nowrap text-right">
         <div class="flex items-center justify-end space-x-2">
           ${getActionButtonHTML(stream.status, stream.id, 'desktop')}
-          <div class="ml-2 flex items-center gap-1">
+            <button class="p-1.5 hover:bg-dark-700 rounded transition-colors" 
+                    title="Share stream link"
+                    onclick="shareStream('${stream.id}', '${stream.youtube_broadcast_id || ''}', '${stream.title.replace(/'/g, "\\'")}')">
+              <i class="ti ti-share text-blue-400 hover:text-white"></i>
+            </button>
             <button class="p-1.5 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" 
                     onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}"
                     ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}>
@@ -2354,6 +2476,46 @@
           restoreButtons();
         });
     }
+    function shareStream(streamId, videoId, title) {
+      if (!videoId) {
+        showToast('info', 'Share link is only available for YouTube API streams.');
+        return;
+      }
+      const url = `https://youtube.com/live/${videoId}?feature=share`;
+      
+      if (navigator.share) {
+        navigator.share({
+          title: title || 'Live Stream',
+          url: url
+        }).catch(err => {
+          // Fallback if share cancelled
+          console.log('Share error/cancel:', err);
+        });
+      } else {
+        // Fallback to clipboard
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(() => {
+            showToast('success', 'Link copied to clipboard!');
+          }).catch(err => {
+            showToast('error', 'Failed to copy link.');
+          });
+        } else {
+          // Very old browser fallback
+          const textArea = document.createElement("textarea");
+          textArea.value = url;
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            showToast('success', 'Link copied to clipboard!');
+          } catch (err) {
+            showToast('error', 'Failed to copy link.');
+          }
+          document.body.removeChild(textArea);
+        }
+      }
+    }
+
     function stopStream(streamId) {
       if (!streamId) return;
       const actionBtns = document.querySelectorAll(`[data-stream-id="${streamId}"] .action-btn`);
@@ -3248,7 +3410,8 @@
             document.getElementById('editYtChannelNameDisplay').textContent = stream.youtube_channel_name;
           }
           if (stream.youtube_channel_thumbnail) {
-            document.getElementById('editYtChannelThumb').src = stream.youtube_channel_thumbnail;
+            const thumbEl = document.getElementById('editYtChannelThumb');
+            if (thumbEl) thumbEl.src = stream.youtube_channel_thumbnail;
           }
           const subscriberCount = stream.youtube_subscriber_count || 0;
           document.getElementById('editYtChannelSubsDisplay').textContent = Number(subscriberCount).toLocaleString() + ' subscribers';
@@ -4321,3 +4484,4 @@
       window._tipsPrevModal = null;
     }
   </script>
+  <script src="/js/ai-generator.js?v=<%= Date.now() %>"></script>

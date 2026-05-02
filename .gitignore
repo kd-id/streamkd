@@ -5,4 +5,12 @@ logs/
 # ignore real env from repo
 .env
 package-lock.json
-db/streamflow.db
+db/*.db
+database.sqlite
+scratch/
+.idea/
+.vscode/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

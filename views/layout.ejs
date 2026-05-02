@@ -126,6 +126,11 @@
           <span class="text-xs mt-1">History</span>
           <span class="sidebar-tooltip group-hover:scale-100">Stream History</span>
         </a>
+        <a href="/settings#ai" id="sidebar-ai-config" class="sidebar-icon group <%= active === 'ai-settings' ? 'bg-primary' : '' %>">
+          <i class="ti ti-robot text-xl"></i>
+          <span class="text-xs mt-1">AI Config</span>
+          <span class="sidebar-tooltip group-hover:scale-100">AI Integration</span>
+        </a>
         <% if (req.session && req.session.user_role === 'admin') { %>
         <a href="/users" class="sidebar-icon group <%= active === 'users' ? 'bg-primary' : '' %>">
           <i class="ti ti-users text-xl"></i>
@@ -238,6 +243,10 @@
       <a href="/playlist" class="bottom-nav-item <%= active === 'playlist' ? 'bottom-nav-active' : '' %>">
         <i class="ti ti-playlist"></i>
         <span>Playlist</span>
+      </a>
+      <a href="/settings#ai" id="mobile-ai-config" class="bottom-nav-item <%= active === 'ai-settings' ? 'bottom-nav-active' : '' %>">
+        <i class="ti ti-robot"></i>
+        <span>AI Config</span>
       </a>
       <button id="mobile-profile-btn" class="bottom-nav-item">
         <div class="relative">
@@ -627,6 +636,24 @@
         }
       });
     }
+
+    // AI Tab Highlight Logic
+    const handleAiHash = () => {
+      const isAiHash = window.location.hash === '#ai' && window.location.pathname === '/settings';
+      const sidebarAi = document.getElementById('sidebar-ai-config');
+      const mobileAi = document.getElementById('mobile-ai-config');
+      
+      if (isAiHash) {
+        if (sidebarAi) sidebarAi.classList.add('bg-primary');
+        if (mobileAi) mobileAi.classList.add('bottom-nav-active');
+      } else if (window.location.pathname === '/settings' && window.location.hash !== '#ai') {
+        if (sidebarAi) sidebarAi.classList.remove('bg-primary');
+        if (mobileAi) mobileAi.classList.remove('bottom-nav-active');
+      }
+    };
+
+    window.addEventListener('hashchange', handleAiHash);
+    handleAiHash();
   });
 
   function loadNotifications() {
@@ -709,7 +736,7 @@
         <div class="p-3 hover:bg-gray-700/50 transition-colors cursor-pointer" data-github-notification onclick="window.open('${commit.html_url}', '_blank')">
           <div class="flex items-start gap-3">
             <div class="w-8 h-8 flex-shrink-0">
-              <img src="${commit.author.avatar_url}" alt="${authorName}" class="w-8 h-8 rounded-full object-cover">
+              <img src="${commit.author.avatar_url}" alt="${authorName}" class="w-8 h-8 rounded-full object-cover" referrerpolicy="no-referrer">
             </div>
             <div class="flex-1 min-w-0">
               <h4 class="text-sm font-medium text-white mb-1">New GitHub Commit</h4>

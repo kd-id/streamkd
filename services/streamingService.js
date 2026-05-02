@@ -460,6 +460,18 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     const bitrate = stream.bitrate || 2500;
     const fps = stream.fps || 30;
 
+    // Optimized Adaptive Logic for Playlist
+    const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+    let finalBitrate = bitrate;
+    let finalResolution = resolution;
+
+    if (activeCount > 0) {
+        finalBitrate = Math.round(bitrate * (activeCount === 1 ? 0.85 : 0.7));
+        if (activeCount >= 2 && (resolution.includes('1080') || resolution.includes('1920'))) {
+            finalResolution = '1280x720';
+        }
+    }
+
     return [
       '-nostdin',
       '-loglevel', 'warning',
@@ -471,23 +483,21 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       '-safe', '0',
       '-i', concatFile,
       '-c:v', 'libx264',
-      '-preset', 'veryfast',
+      '-preset', 'superfast',
       '-tune', 'zerolatency',
-      '-profile:v', 'high',
-      '-level', '4.1',
-      '-b:v', `${bitrate}k`,
-      '-maxrate', `${Math.round(bitrate * 1.1)}k`,
-      '-bufsize', `${bitrate * 2}k`,
+      '-profile:v', 'main',
       '-pix_fmt', 'yuv420p',
-      '-g', String(fps * 2),
-      '-keyint_min', String(fps),
-      '-sc_threshold', '0',
-      '-s', resolution,
-      '-r', String(fps),
+      '-b:v', `${finalBitrate}k`,
+      '-maxrate', `${finalBitrate}k`,
+      '-bufsize', `${finalBitrate * 2}k`,
+      '-s', finalResolution,
+      '-r', fps,
+      '-g', fps * 2,
+      '-keyint_min', fps,
+      '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ar', '44100',
-      '-ac', '2',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
       rtmpUrl
@@ -516,6 +526,22 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   fs.writeFileSync(audioConcatFile, audioContent);
 
   if (!stream.use_advanced_settings) {
+    const resolution = stream.resolution || '1280x720';
+    const bitrate = stream.bitrate || 2500;
+    const fps = stream.fps || 30;
+
+    // Optimized Adaptive Logic for Playlist with Custom Audio
+    const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+    let finalBitrate = bitrate;
+    let finalResolution = resolution;
+
+    if (activeCount > 0) {
+        finalBitrate = Math.round(bitrate * (activeCount === 1 ? 0.85 : 0.7));
+        if (activeCount >= 2 && (resolution.includes('1080') || resolution.includes('1920'))) {
+            finalResolution = '1280x720';
+        }
+    }
+
     return [
       '-nostdin',
       '-loglevel', 'warning',
@@ -532,8 +558,22 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       '-i', audioConcatFile,
       '-map', '0:v:0',
       '-map', '1:a:0',
-      '-c:v', 'copy',
-      '-c:a', 'copy',
+      '-c:v', 'libx264',
+      '-preset', 'superfast',
+      '-tune', 'zerolatency',
+      '-profile:v', 'main',
+      '-pix_fmt', 'yuv420p',
+      '-b:v', `${finalBitrate}k`,
+      '-maxrate', `${finalBitrate}k`,
+      '-bufsize', `${finalBitrate * 2}k`,
+      '-s', finalResolution,
+      '-r', fps,
+      '-g', fps * 2,
+      '-keyint_min', fps,
+      '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ar', '44100',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
       rtmpUrl
@@ -631,6 +671,22 @@ async function buildFFmpegArgs(stream) {
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
 
+  // Optimized Adaptive Logic for 1 Core VPS
+  // Focuses on maintaining "Excellent" health status with minimal CPU overhead
+  const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+  let finalBitrate = bitrate;
+  let finalResolution = resolution;
+
+  if (activeCount > 0) {
+      // Balance bitrate to prevent network/CPU saturation on 1 Core
+      finalBitrate = Math.round(bitrate * (activeCount === 1 ? 0.85 : 0.7));
+      // Only downscale if absolutely necessary (3+ streams on 1 core)
+      if (activeCount >= 2 && (resolution.includes('1080') || resolution.includes('1920'))) {
+          finalResolution = '1280x720';
+      }
+      console.log(`[StreamingService] Adaptive Tuning: ${activeCount} active. Using ${finalResolution} @ ${finalBitrate}k (CPU Optimized)`);
+  }
+
   return [
     '-nostdin',
     '-loglevel', 'warning',
@@ -641,23 +697,21 @@ async function buildFFmpegArgs(stream) {
     '-stream_loop', loopValue,
     '-i', videoPath,
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
+    '-preset', 'superfast', // Superfast is the sweet spot for 1 Core Excellent Quality
     '-tune', 'zerolatency',
-    '-profile:v', 'high',
-    '-level', '4.1',
-    '-b:v', `${bitrate}k`,
-    '-maxrate', `${Math.round(bitrate * 1.1)}k`,
-    '-bufsize', `${bitrate * 2}k`,
-    '-pix_fmt', 'yuv420p',
-    '-g', String(fps * 2),
-    '-keyint_min', String(fps),
-    '-sc_threshold', '0',
-    '-s', resolution,
-    '-r', String(fps),
+    '-profile:v', 'main',
+    '-pix_fmt', 'yuv420p', // Required for YouTube Excellent Health
+    '-b:v', `${finalBitrate}k`,
+    '-maxrate', `${finalBitrate}k`, // Strict CBR for YouTube
+    '-bufsize', `${finalBitrate * 2}k`,
+    '-s', finalResolution,
+    '-r', fps,
+    '-g', fps * 2, // Strict 2s Keyframe interval
+    '-keyint_min', fps,
+    '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`, // Enforce keyframes
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
-    '-ac', '2',
     '-f', 'flv',
     '-flvflags', 'no_duration_filesize',
     rtmpUrl
@@ -1017,6 +1071,7 @@ async function stopStream(streamId) {
       if (stream.is_youtube_api && stream.youtube_broadcast_id) {
         try {
           const youtubeService = require('./youtubeService');
+          await youtubeService.stopYouTubeBroadcast(streamId);
           await youtubeService.deleteYouTubeBroadcast(streamId);
         } catch (e) { }
       }
