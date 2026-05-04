@@ -111,6 +111,8 @@ function createTables() {
         name TEXT NOT NULL,
         description TEXT,
         is_shuffle BOOLEAN DEFAULT 0,
+        transition_type TEXT DEFAULT 'none',
+        transition_duration REAL DEFAULT 1.0,
         user_id TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -146,6 +148,18 @@ function createTables() {
       db.run(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`, (err) => {
         if (err && !err.message.includes('duplicate column name')) {
           console.error('Error adding status column:', err.message);
+        }
+      });
+
+      db.run(`ALTER TABLE playlists ADD COLUMN transition_type TEXT DEFAULT 'none'`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding transition_type column:', err.message);
+        }
+      });
+
+      db.run(`ALTER TABLE playlists ADD COLUMN transition_duration REAL DEFAULT 1.0`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding transition_duration column:', err.message);
         }
       });
 
@@ -386,7 +400,22 @@ function createTables() {
         if (err && !err.message.includes('already exists')) {
           console.error('Error creating app_settings table:', err.message);
         }
-        resolve();
+        
+        db.run(`CREATE TABLE IF NOT EXISTS ai_prompt_history (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          prompt_text TEXT NOT NULL,
+          image_url TEXT,
+          saved_video_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (saved_video_id) REFERENCES videos(id) ON DELETE SET NULL
+        )`, (err) => {
+          if (err && !err.message.includes('already exists')) {
+            console.error('Error creating ai_prompt_history table:', err.message);
+          }
+          resolve();
+        });
       });
     });
   });

@@ -5,11 +5,16 @@ class Playlist {
   static findAll(userId) {
     return new Promise((resolve, reject) => {
       db.all(
-        `SELECT p.*, 
-         (SELECT COUNT(*) FROM playlist_videos pv 
-          JOIN videos v ON pv.video_id = v.id 
-          WHERE pv.playlist_id = p.id 
-          AND NOT (v.filepath LIKE '%/audio/%' OR v.filepath LIKE '%.m4a' OR v.filepath LIKE '%.aac' OR v.filepath LIKE '%.mp3')) as video_count,
+        `SELECT p.*,
+         (SELECT COUNT(*) FROM playlist_videos pv
+          JOIN videos v ON pv.video_id = v.id
+          WHERE pv.playlist_id = p.id
+          AND NOT (v.filepath LIKE '%/audio/%' OR v.filepath LIKE '%.m4a' OR v.filepath LIKE '%.aac' OR v.filepath LIKE '%.mp3')
+          AND NOT (LOWER(v.filepath) LIKE '%.jpg' OR LOWER(v.filepath) LIKE '%.jpeg' OR LOWER(v.filepath) LIKE '%.png' OR LOWER(v.filepath) LIKE '%.webp' OR LOWER(v.filepath) LIKE '%.bmp' OR LOWER(v.filepath) LIKE '%.gif')) as video_count,
+         (SELECT COUNT(*) FROM playlist_videos pv
+          JOIN videos v ON pv.video_id = v.id
+          WHERE pv.playlist_id = p.id
+          AND (LOWER(v.filepath) LIKE '%.jpg' OR LOWER(v.filepath) LIKE '%.jpeg' OR LOWER(v.filepath) LIKE '%.png' OR LOWER(v.filepath) LIKE '%.webp' OR LOWER(v.filepath) LIKE '%.bmp' OR LOWER(v.filepath) LIKE '%.gif')) as image_count,
          (SELECT COUNT(*) FROM playlist_audios pa WHERE pa.playlist_id = p.id) as audio_count,
          (SELECT GROUP_CONCAT(v2.thumbnail_path)
           FROM playlist_videos pv2
@@ -17,7 +22,7 @@ class Playlist {
           WHERE pv2.playlist_id = p.id
           AND NOT (v2.filepath LIKE '%/audio/%' OR v2.filepath LIKE '%.m4a' OR v2.filepath LIKE '%.aac' OR v2.filepath LIKE '%.mp3')
           ORDER BY pv2.position ASC) as thumbnails
-         FROM playlists p 
+         FROM playlists p
          WHERE p.user_id = ? 
          GROUP BY p.id
          ORDER BY p.updated_at DESC`,
@@ -91,8 +96,16 @@ class Playlist {
     const playlistId = uuidv4();
     return new Promise((resolve, reject) => {
       db.run(
-        'INSERT INTO playlists (id, name, description, is_shuffle, user_id) VALUES (?, ?, ?, ?, ?)',
-        [playlistId, playlistData.name, playlistData.description || null, playlistData.is_shuffle || 0, playlistData.user_id],
+        'INSERT INTO playlists (id, name, description, is_shuffle, transition_type, transition_duration, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          playlistId,
+          playlistData.name,
+          playlistData.description || null,
+          playlistData.is_shuffle || 0,
+          playlistData.transition_type || 'none',
+          playlistData.transition_duration || 1.0,
+          playlistData.user_id
+        ],
         function (err) {
           if (err) {
             return reject(err);

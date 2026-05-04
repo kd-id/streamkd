@@ -474,6 +474,7 @@
 <script>
 const videos = <%- JSON.stringify(videos) %>;
 const playlists = <%- JSON.stringify(playlists || []) %>;
+const streams = <%- JSON.stringify(streams || []) %>;
 const csrfToken = '<%= csrfToken %>';
 let rotationItemCount = 0;
 
@@ -601,7 +602,26 @@ function addRotationItem() {
   const itemHtml = `
     <div class="rotation-item bg-gray-900 rounded-lg p-4 border border-gray-700" data-index="${idx}">
       <div class="flex items-center justify-between mb-3">
-        <span class="text-sm font-medium text-gray-300 item-number">#${idx}</span>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium text-gray-300 item-number">#${idx}</span>
+          <div class="relative">
+            <button type="button" onclick="toggleStreamImport(${idx})" class="text-[10px] bg-primary/20 text-primary px-2 py-1 rounded hover:bg-primary/30 transition-colors flex items-center gap-1">
+              <i class="ti ti-download"></i> IMPORT STREAM
+            </button>
+            <div id="streamImportDropdown-${idx}" class="hidden absolute z-30 mt-1 w-64 bg-dark-800 border border-gray-600 rounded-lg shadow-xl overflow-hidden">
+              <div class="p-2 border-b border-gray-700">
+                <input type="text" placeholder="Search streams..." class="w-full bg-dark-700 text-xs px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-primary" onkeyup="filterStreamImport(this, ${idx})">
+              </div>
+              <div class="max-h-48 overflow-y-auto stream-import-list">
+                ${streams.length > 0 ? streams.map(s => `
+                  <button type="button" onclick="importStreamData(${idx}, '${s.id}')" class="w-full text-left px-3 py-2 text-xs hover:bg-gray-700 border-b border-gray-700/50 last:border-0 truncate">
+                    ${s.title}
+                  </button>
+                `).join('') : '<div class="p-3 text-center text-gray-500 text-xs">No saved streams</div>'}
+              </div>
+            </div>
+          </div>
+        </div>
         <button type="button" onclick="removeRotationItem(this)" class="text-gray-400 hover:text-red-400">
           <i class="ti ti-trash"></i>
         </button>
@@ -1006,12 +1026,8 @@ async function saveRotation() {
       return;
     }
     
-    let thumbnailPath = null;
-    let originalThumbnailPath = null;
-    if (rotationId) {
-      thumbnailPath = item.dataset.thumbnailPath || null;
-      originalThumbnailPath = item.dataset.originalThumbnail || null;
-    }
+    let thumbnailPath = item.dataset.thumbnailPath || null;
+    let originalThumbnailPath = item.dataset.originalThumbnail || null;
     
     items.push({
       order_index: i,
@@ -1318,4 +1334,90 @@ async function stopRotation(id) {
     showToast('error', 'An error occurred');
   }
 }
+function toggleStreamImport(idx) {
+  const dropdown = document.getElementById(`streamImportDropdown-${idx}`);
+  document.querySelectorAll('[id^="streamImportDropdown-"]').forEach(d => {
+    if (d !== dropdown) d.classList.add('hidden');
+  });
+  dropdown.classList.toggle('hidden');
+  if (!dropdown.classList.contains('hidden')) {
+    dropdown.querySelector('input').focus();
+  }
+}
+
+function filterStreamImport(input, idx) {
+  const filter = input.value.toLowerCase();
+  const list = input.closest('.relative').querySelector('.stream-import-list');
+  const buttons = list.querySelectorAll('button');
+  
+  buttons.forEach(btn => {
+    const text = btn.textContent.toLowerCase();
+    btn.style.display = text.includes(filter) ? 'block' : 'none';
+  });
+}
+
+function importStreamData(idx, streamId) {
+  const stream = streams.find(s => s.id == streamId);
+  if (!stream) return;
+  
+  const itemEl = document.querySelector(`.rotation-item[data-index="${idx}"]`);
+  
+  // Fill title and description
+  itemEl.querySelector(`input[name="items[${idx}][title]"]`).value = stream.title || '';
+  itemEl.querySelector(`textarea[name="items[${idx}][description]"]`).value = stream.youtube_description || '';
+  
+  // Fill tags
+  const tags = stream.youtube_tags || '';
+  if (tags) {
+    const container = itemEl.querySelector('.tags-container');
+    if (container._addTags) {
+      container._addTags(''); // Clear existing
+      container._tags = [];
+      container._addTags(tags);
+    }
+  }
+  
+  // Fill Video/Playlist
+  const videoInput = itemEl.querySelector('.video-id-input');
+  const selectedText = itemEl.querySelector('.selected-video-text');
+  
+  if (stream.video_type === 'playlist') {
+    videoInput.value = `playlist:${stream.video_id}`;
+    selectedText.textContent = `[Playlist] ${stream.playlist_name || 'Playlist Selected'}`;
+  } else if (stream.video_id) {
+    videoInput.value = stream.video_id;
+    selectedText.textContent = stream.video_title || 'Video Selected';
+  }
+  
+  if (videoInput.value) {
+    selectedText.classList.remove('text-gray-300');
+    selectedText.classList.add('text-white');
+  }
+  
+  // Fill Thumbnail
+  const thumbnailPath = stream.youtube_thumbnail || stream.video_thumbnail;
+  if (thumbnailPath) {
+    const thumbImg = itemEl.querySelector('.thumbnail-img');
+    const thumbPreview = itemEl.querySelector('.thumbnail-preview');
+    const thumbPlaceholder = itemEl.querySelector('.thumbnail-placeholder');
+    
+    thumbImg.src = thumbnailPath.startsWith('http') ? thumbnailPath : `/uploads/thumbnails/${thumbnailPath.split('/').pop()}`;
+    thumbPreview.classList.remove('hidden');
+    thumbPlaceholder.classList.add('hidden');
+    
+    // Set for saving logic
+    itemEl.dataset.originalThumbnail = thumbnailPath;
+    itemEl.dataset.thumbnailPath = thumbnailPath;
+  }
+  
+  // Close dropdown
+  document.getElementById(`streamImportDropdown-${idx}`).classList.add('hidden');
+  showToast('success', 'Stream data imported!');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[onclick^="toggleStreamImport"]')) {
+    document.querySelectorAll('[id^="streamImportDropdown-"]').forEach(d => d.classList.add('hidden'));
+  }
+});
 </script>

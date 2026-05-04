@@ -1,0 +1,461 @@
+<% layout('layout') -%>
+
+<div class="container mx-auto px-4 py-8 max-w-[1400px]">
+    <!-- Header Section -->
+    <div class="flex items-center gap-4 mb-8">
+        <div class="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/10 border border-primary/20">
+            <i class="ti ti-sparkles text-primary text-2xl animate-pulse"></i>
+        </div>
+        <div>
+            <h1 class="text-2xl font-black text-white tracking-tight">AI Prompt Studio</h1>
+            <p class="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold">Creative Generation Suite</p>
+        </div>
+    </div>
+
+    <!-- Main Studio Container -->
+    <div class="bg-dark-800 rounded-3xl border border-gray-700/30 shadow-2xl overflow-hidden flex flex-col min-h-[600px]">
+        <!-- Minimal Tabs (3 Tabs Now) -->
+        <div class="p-3 bg-dark-900/60 border-b border-gray-700/30 flex justify-between items-center">
+            <div class="flex bg-dark-700/50 p-1 rounded-xl">
+                <button onclick="switchStudioTab('builder')" id="tab-builder" class="studio-tab active flex items-center gap-2 px-6 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap">
+                    <i class="ti ti-wand text-xs"></i> Prompt Builder
+                </button>
+                <button onclick="switchStudioTab('generate')" id="tab-generate" class="studio-tab flex items-center gap-2 px-6 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all text-gray-500 hover:text-gray-300 whitespace-nowrap">
+                    <i class="ti ti-photo text-xs"></i> Generate Image
+                </button>
+                <button onclick="switchStudioTab('history')" id="tab-history" class="studio-tab flex items-center gap-2 px-6 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all text-gray-500 hover:text-gray-300 whitespace-nowrap">
+                    <i class="ti ti-history text-xs"></i> History
+                </button>
+            </div>
+            <div class="hidden md:flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/20 rounded-full">
+                <span class="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></span>
+                <span class="text-[9px] text-primary font-black uppercase tracking-widest">Ready to Create</span>
+            </div>
+        </div>
+
+        <div class="flex-1 p-6 overflow-y-auto custom-scrollbar">
+            <!-- Tab 1: Prompt Builder -->
+            <div id="studio-builder" class="studio-content space-y-8">
+                <!-- Magic Section -->
+                <div class="bg-primary/5 rounded-2xl p-4 border border-primary/10 max-w-2xl">
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="magicKeywords" class="flex-1 bg-dark-900/80 border border-gray-700 rounded-xl px-5 py-3 text-[12px] text-white focus:ring-1 focus:ring-primary transition-all placeholder-gray-600" placeholder="Keywords for Magic Expand...">
+                        <button id="btnMagicGenerate" class="bg-primary hover:bg-secondary text-dark-900 text-[11px] font-bold px-8 py-3 rounded-xl transition-all flex items-center gap-2">
+                            <i class="ti ti-sparkles"></i> Magic Expand
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Master Formula -->
+                <div class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <% ['Subject', 'Activity', 'Location'].forEach(field => { %>
+                            <div class="space-y-2">
+                                <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest px-1"><%= field %></label>
+                                <div class="flex flex-col gap-2">
+                                    <select onchange="updateField('<%= field.toLowerCase() %>', this.value)" class="w-full bg-dark-900 border border-gray-700/50 rounded-xl px-3 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                        <option value="" class="bg-dark-800">Select <%= field %>...</option>
+                                        <% if (field === 'Subject') { %>
+                                            <optgroup label="Humans" class="bg-dark-800 text-gray-500 text-[9px]">
+                                                <option value="A majestic cyber samurai" class="bg-dark-800 text-white">Cyber Samurai</option>
+                                                <option value="A Victorian steampunk detective" class="bg-dark-800 text-white">Steampunk Detective</option>
+                                                <option value="An ethereal celestial priestess" class="bg-dark-800 text-white">Celestial Priestess</option>
+                                            </optgroup>
+                                            <optgroup label="Animals & Insects" class="bg-dark-800 text-gray-500 text-[9px]">
+                                                <option value="A majestic phoenix rising from embers" class="bg-dark-800 text-white">Phoenix</option>
+                                                <option value="A cybernetic white wolf" class="bg-dark-800 text-white">Cyber Wolf</option>
+                                                <option value="A glowing neon dragonfly" class="bg-dark-800 text-white">Neon Dragonfly</option>
+                                            </optgroup>
+                                            <optgroup label="Aliens & Abstract" class="bg-dark-800 text-gray-500 text-[9px]">
+                                                <option value="A bioluminescent alien entity" class="bg-dark-800 text-white">Biolum Alien</option>
+                                                <option value="Liquid gold vortex energy" class="bg-dark-800 text-white">Gold Vortex</option>
+                                                <option value="A fusion of lion and dragon" class="bg-dark-800 text-white">Lion-Dragon Fusion</option>
+                                            </optgroup>
+                                        <% } else if (field === 'Activity') { %>
+                                            <option value="standing in a heroic cinematic pose" class="bg-dark-800 text-white">Heroic Pose</option>
+                                            <option value="engaged in an epic battle" class="bg-dark-800 text-white">Epic Battle</option>
+                                            <option value="casting a powerful magic spell" class="bg-dark-800 text-white">Spellcasting</option>
+                                            <option value="slowly dissolving into digital dust" class="bg-dark-800 text-white">Digital Dust</option>
+                                        <% } else if (field === 'Location') { %>
+                                            <option value="in a neon-drenched cyberpunk megalopolis" class="bg-dark-800 text-white">Cyber City</option>
+                                            <option value="inside a bioluminescent underwater cave" class="bg-dark-800 text-white">Glow Ocean</option>
+                                            <option value="atop a floating zen garden" class="bg-dark-800 text-white">Sky Garden</option>
+                                            <option value="in a dark academia magic library" class="bg-dark-800 text-white">Magic Library</option>
+                                        <% } %>
+                                    </select>
+                                    <input type="text" id="<%= field.toLowerCase() %>" class="w-full bg-dark-900/50 border border-gray-700/30 rounded-xl px-4 py-2.5 text-[11px] text-white focus:ring-1 focus:ring-primary" placeholder="Or type manually...">
+                                </div>
+                            </div>
+                        <% }); %>
+                    </div>
+
+                    <!-- Aesthetics -->
+                    <div class="pt-4">
+                        <div class="h-px bg-gray-700/20 w-full flex items-center justify-center mb-6">
+                            <span class="bg-dark-800 px-4 text-[9px] text-gray-600 uppercase tracking-[0.3em] font-bold">Aesthetics Configuration</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                            <% ['Art Style', 'Lighting', 'Mood', 'Colors', 'Camera', 'Technical'].forEach(field => { %>
+                                <% const id = field.toLowerCase().replace(' ', ''); %>
+                                <div class="bg-dark-900/30 p-4 rounded-xl border border-gray-700/20 space-y-2">
+                                    <label class="text-[9px] font-bold text-gray-500 uppercase tracking-wider block"><%= field %></label>
+                                    <select onchange="updateField('<%= id %>', this.value)" class="w-full bg-dark-700/50 border border-gray-600/30 rounded-lg px-2 py-2 text-[10px] text-white focus:ring-1 focus:ring-primary appearance-none custom-scrollbar">
+                                        <option value="" class="bg-dark-800">Choose...</option>
+                                        <% if(id === 'artstyle') { %>
+                                            <option value="Unreal Engine 5 Render, 8k, hyper-realistic" class="bg-dark-800 text-white">UE5 Viral</option>
+                                            <option value="Studio Ghibli style, hand-drawn, whimsical" class="bg-dark-800 text-white">Studio Ghibli</option>
+                                            <option value="Disney Pixar 3D style, cute, expressive" class="bg-dark-800 text-white">Pixar Style</option>
+                                            <option value="Retro 80s Synthwave, neon pink and purple" class="bg-dark-800 text-white">Synthwave</option>
+                                            <option value="Dark Academia, oil painting, dramatic" class="bg-dark-800 text-white">Dark Academia</option>
+                                            <option value="Cyberpunk 2077 aesthetic, gritty, high-tech" class="bg-dark-800 text-white">Cyberpunk</option>
+                                        <% } else if(id === 'lighting') { %>
+                                            <option value="Cinematic rim lighting, high contrast" class="bg-dark-800 text-white">Cinematic Rim</option>
+                                            <option value="Volumetric fog, god rays, atmospheric" class="bg-dark-800 text-white">God Rays</option>
+                                            <option value="Soft bokeh, golden hour sunlight" class="bg-dark-800 text-white">Golden Hour</option>
+                                            <option value="Harsh neon flickering lights" class="bg-dark-800 text-white">Neon Flicker</option>
+                                        <% } %>
+                                    </select>
+                                    <input type="text" id="<%= id %>" class="w-full bg-transparent border-b border-gray-700 text-[10px] text-white focus:border-primary outline-none py-1 transition-colors" placeholder="Type here...">
+                                </div>
+                            <% }); %>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 pt-4">
+                        <button id="btnGeneratePrompt" class="flex-1 bg-primary hover:bg-secondary text-dark-900 text-[11px] font-bold py-4 rounded-xl transition-all shadow-lg shadow-primary/10">Build Master Prompt</button>
+                        <button id="btnClear" class="bg-dark-700 hover:bg-dark-600 text-gray-400 text-[11px] px-8 py-4 rounded-xl transition-all">Clear All</button>
+                    </div>
+
+                    <div id="outputContainer" class="hidden animate-in slide-in-from-bottom-4 duration-300">
+                        <div class="bg-dark-900 rounded-2xl border border-primary/20 p-5 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[9px] font-bold text-primary uppercase tracking-widest">Constructed v3 Prompt</span>
+                                <button onclick="copyToClipboard('resultPrompt')" class="text-[9px] text-white hover:text-primary transition-colors uppercase font-bold flex items-center gap-2">
+                                    <i class="ti ti-copy"></i> Copy Prompt
+                                </button>
+                            </div>
+                            <textarea id="resultPrompt" class="w-full bg-dark-800/50 border border-gray-700/50 rounded-xl p-4 text-[12px] text-gray-200 h-28 focus:ring-0 resize-none leading-relaxed" readonly></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Generate Image -->
+            <div id="studio-generate" class="studio-content hidden animate-in fade-in duration-300">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div class="lg:col-span-8 space-y-6">
+                        <div class="space-y-3">
+                            <label class="block text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] px-1">Describe Your Vision</label>
+                            <textarea id="directPrompt" class="w-full bg-dark-900 border border-gray-700/50 rounded-2xl p-6 text-[13px] text-white placeholder-gray-600 focus:ring-1 focus:ring-primary h-[180px] custom-scrollbar resize-none shadow-inner" placeholder="Visualize your masterpiece..."></textarea>
+                        </div>
+                        <div class="space-y-3">
+                            <label class="block text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] px-1">Negative Prompt</label>
+                            <input type="text" id="directNegative" class="w-full bg-dark-900 border border-gray-700/50 rounded-xl p-4 text-[12px] text-gray-400 focus:ring-1 focus:ring-primary shadow-inner" placeholder="E.g. low quality, distorted...">
+                        </div>
+                    </div>
+                    
+                    <div class="lg:col-span-4 space-y-6">
+                        <div class="bg-dark-900/80 p-6 rounded-3xl border border-gray-700/30 space-y-8">
+                            <div>
+                                <label class="block text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">Aspect Ratio</label>
+                                <select id="directSize" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-4 px-4 text-[11px] text-white appearance-none cursor-pointer hover:bg-dark-600 transition-colors">
+                                    <option value="1024x1024">Square (1:1)</option>
+                                    <option value="1024x1792">Portrait (9:16)</option>
+                                    <option value="1792x1024">Landscape (16:9)</option>
+                                </select>
+                            </div>
+                            <button onclick="generateDirectImage()" id="btnDirectGenerate" class="w-full py-5 bg-primary hover:bg-secondary text-dark-900 font-black rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl shadow-primary/10 active:scale-[0.97] group">
+                                <i class="ti ti-sparkles text-lg group-hover:rotate-12 transition-transform"></i>
+                                <span class="text-xs uppercase tracking-widest">Generate Art</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="resultsGallery" class="mt-12 hidden border-t border-gray-700/20 pt-10">
+                    <div id="galleryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <!-- Items prepend here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: History (Dedicated Tab) -->
+            <div id="studio-history" class="studio-content hidden animate-in slide-in-from-bottom-4 duration-300">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-3">
+                        <div class="w-1 h-6 bg-primary rounded-full"></div>
+                        <h3 class="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em]">Prompt History</h3>
+                    </div>
+                    <p class="text-[9px] text-gray-600 italic font-bold">Total <%= history.length %> items recorded</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <% if (history && history.length > 0) { %>
+                        <% history.forEach(item => { %>
+                            <div class="bg-dark-900/50 rounded-2xl border border-gray-700/30 p-5 hover:border-primary/40 transition-all group relative">
+                                <p class="text-[11px] text-gray-300 line-clamp-3 leading-relaxed italic mb-5">"<%= item.prompt_text %>"</p>
+                                <div class="flex items-center justify-between pt-4 border-t border-gray-700/20">
+                                    <span class="text-[9px] text-gray-600 font-bold tracking-tighter"><%= new Date(item.created_at).toLocaleString() %></span>
+                                    <div class="flex gap-2">
+                                        <button onclick="copyRawPrompt(this, `<%= item.prompt_text.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Copy Text">
+                                            <i class="ti ti-copy text-sm"></i>
+                                        </button>
+                                        <button onclick="reusePrompt(`<%= item.prompt_text.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Use as Prompt">
+                                            <i class="ti ti-refresh text-sm"></i>
+                                        </button>
+                                        <button onclick="deleteHistory(<%= item.id %>)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-xl transition-all" title="Delete">
+                                            <i class="ti ti-trash text-sm"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div class="col-span-full py-20 flex flex-col items-center justify-center opacity-30">
+                            <i class="ti ti-history text-4xl mb-4"></i>
+                            <span class="text-xs font-black uppercase tracking-widest">No History Available</span>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="imageModal" class="fixed inset-0 bg-black/98 z-[100] hidden items-center justify-center p-8 backdrop-blur-xl" onclick="this.classList.add('hidden')">
+    <div class="relative max-w-5xl w-full h-full flex items-center justify-center">
+        <img id="modalImg" src="" class="max-w-full max-h-full rounded-3xl shadow-2xl border border-gray-800/50">
+    </div>
+</div>
+
+<script>
+    (function() {
+        window.switchStudioTab = function(tab) {
+            document.querySelectorAll('.studio-tab').forEach(t => {
+                t.classList.remove('active');
+                t.classList.add('text-gray-500');
+            });
+            document.querySelectorAll('.studio-content').forEach(c => c.classList.add('hidden'));
+
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.remove('text-gray-500');
+            document.getElementById(`studio-${tab}`).classList.remove('hidden');
+        };
+
+        window.updateField = function(id, val) {
+            if (val) {
+                const el = document.getElementById(id);
+                if (el) el.value = val;
+            }
+        };
+
+        // Logic Builder
+        document.getElementById('btnGeneratePrompt').addEventListener('click', () => {
+            const subject = document.getElementById('subject').value.trim();
+            const activity = document.getElementById('activity').value.trim();
+            const location = document.getElementById('location').value.trim();
+            const style = document.getElementById('artstyle').value.trim();
+            const light = document.getElementById('lighting').value.trim();
+            const mood = document.getElementById('mood').value.trim();
+            const color = document.getElementById('colors').value.trim();
+            const cam = document.getElementById('camera').value.trim();
+            const tech = document.getElementById('technical').value.trim();
+
+            let parts = [];
+            let core = subject || 'A concept';
+            if (activity) core += ' ' + activity;
+            if (location) core += ' ' + location;
+            parts.push(core);
+
+            if (style) parts.push(style);
+            if (light) parts.push(light);
+            if (mood) parts.push(mood);
+            if (color) parts.push(color);
+            if (cam) parts.push(cam);
+            if (tech) parts.push(tech);
+
+            let fullPrompt = parts.filter(p => p.length > 0).join(', ');
+            fullPrompt = fullPrompt.replace(/\s+/g, ' ').trim();
+
+            document.getElementById('resultPrompt').value = fullPrompt;
+            window.currentPrompt = fullPrompt;
+            document.getElementById('outputContainer').classList.remove('hidden');
+            savePromptHistory(fullPrompt);
+        });
+
+        window.generateDirectImage = async function() {
+            const prompt = document.getElementById('directPrompt').value.trim();
+            const negative = document.getElementById('directNegative').value.trim();
+            const size = document.getElementById('directSize').value;
+            const btn = document.getElementById('btnDirectGenerate');
+
+            if (!prompt) return showToast('Enter prompt.', 'warning');
+
+            btn.disabled = true;
+            btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Generating...`;
+
+            try {
+                const finalPrompt = negative ? `${prompt} [Negative: ${negative}]` : prompt;
+                const response = await fetch('/api/ai/generate-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: finalPrompt, size })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    addResultToGallery(data.imageUrl, prompt);
+                    showToast('Generated!', 'success');
+                    fetch('/api/ai/save-history', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt, imageUrl: data.imageUrl })
+                    });
+                } else {
+                    showToast(data.error || 'Failed.', 'error');
+                }
+            } catch (error) {
+                showToast('Error.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="ti ti-sparkles"></i> Generate Art`;
+            }
+        };
+
+        function addResultToGallery(url, prompt) {
+            const gallery = document.getElementById('resultsGallery');
+            const grid = document.getElementById('galleryGrid');
+            gallery.classList.remove('hidden');
+            
+            const item = document.createElement('div');
+            item.className = 'gallery-item group animate-in zoom-in duration-500';
+            item.innerHTML = `
+                <img src="${url}" class="w-full h-64 object-cover cursor-pointer transition-transform duration-700 group-hover:scale-110" onclick="viewImage('${url}')">
+                <div class="gallery-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-all flex flex-col justify-end p-6">
+                    <p class="text-[10px] text-gray-200 line-clamp-2 mb-4 font-bold italic">"${prompt}"</p>
+                    <div class="flex gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform">
+                        <button onclick="downloadDirect('${url}')" class="flex-1 bg-white text-dark-900 text-[9px] font-black py-3 rounded-xl transition-all">Save</button>
+                        <button onclick="saveToGalleryDirect('${url}')" class="flex-1 bg-primary text-white text-[9px] font-black py-3 rounded-xl transition-all">Add</button>
+                    </div>
+                </div>
+            `;
+            grid.prepend(item);
+        }
+
+        async function savePromptHistory(prompt) {
+            try {
+                await fetch('/api/ai/save-history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+            } catch (e) {}
+        }
+
+        window.copyRawPrompt = function(btn, text) {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            showToast('Prompt copied!', 'success');
+        };
+
+        window.reusePrompt = function(text) {
+            const dp = document.getElementById('directPrompt');
+            if(dp) dp.value = text;
+            switchStudioTab('generate');
+            showToast('Prompt loaded!', 'info');
+        };
+
+        window.deleteHistory = async function(id) {
+            if (!confirm('Delete record?')) return;
+            try {
+                const response = await fetch(`/api/ai/prompt-history/${id}`, { method: 'DELETE' });
+                if ((await response.json()).success) location.reload();
+            } catch (e) {}
+        };
+
+        window.viewImage = function(url) {
+            const modal = document.getElementById('imageModal');
+            const img = document.getElementById('modalImg');
+            img.src = url;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.copyToClipboard = function(id) {
+            const el = document.getElementById(id);
+            el.select();
+            document.execCommand('copy');
+            showToast('Copied!', 'success');
+        };
+
+        // Toast Notification System
+        window.showToast = function(message, type) {
+            // Remove existing toast if any
+            const existing = document.getElementById('studioToast');
+            if (existing) existing.remove();
+
+            const colors = {
+                success: 'bg-green-500/20 border-green-500/50 text-green-400',
+                error: 'bg-red-500/20 border-red-500/50 text-red-400',
+                warning: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400',
+                info: 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+            };
+            const icons = {
+                success: 'ti-check',
+                error: 'ti-x',
+                warning: 'ti-alert-triangle',
+                info: 'ti-info-circle'
+            };
+
+            const toast = document.createElement('div');
+            toast.id = 'studioToast';
+            toast.className = `fixed top-6 right-6 z-[200] px-6 py-4 rounded-2xl border backdrop-blur-xl shadow-2xl flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${colors[type] || colors.info}`;
+            toast.innerHTML = `<i class="ti ${icons[type] || icons.info} text-lg"></i><span class="text-[12px] font-bold">${message}</span>`;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+    })();
+</script>
+
+<style>
+    :root {
+        --primary: #3b82f6;
+        --dark-900: #020617;
+        --dark-800: #0f172a;
+        --dark-700: #1e293b;
+    }
+    .studio-tab.active {
+        background: #1e293b;
+        color: #3b82f6;
+    }
+    .gallery-item {
+        position: relative;
+        border-radius: 1.5rem;
+        overflow: hidden;
+        background: #020617;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.5s ease;
+    }
+    .gallery-item:hover { transform: translateY(-5px); border-color: #3b82f6; }
+    .gallery-overlay { background: linear-gradient(to top, rgba(2, 6, 23, 0.98) 0%, rgba(2, 6, 23, 0.4) 100%); }
+    select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 1rem center;
+        background-repeat: no-repeat;
+        background-size: 1.1em;
+        padding-right: 2.5rem;
+    }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    .animate-in { animation-fill-mode: both; }
+</style>

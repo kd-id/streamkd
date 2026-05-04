@@ -2132,9 +2132,8 @@
         <div>${statusBadge}</div>
         <div class="flex items-center gap-1.5">
           ${getActionButtonHTML(stream.status, stream.id, 'mobile')}
-          <button class="p-1 hover:bg-dark-700 rounded transition-colors" 
-                  title="Share stream link"
-                  onclick="shareStream('${stream.id}', '${stream.youtube_broadcast_id || ''}', '${stream.title.replace(/'/g, "\\'")}')">
+          <button class="stream-share-btn p-1 hover:bg-dark-700 rounded transition-colors"
+                  title="Share stream link">
             <i class="ti ti-share text-blue-400 hover:text-white text-sm"></i>
           </button>
           <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-edit text-gray-400 hover:text-white text-sm"></i></button>
@@ -2142,6 +2141,12 @@
         </div>
       </div>
     `;
+      const shareBtn = card.querySelector('.stream-share-btn');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+          shareStream(stream.id, stream.youtube_broadcast_id || '', stream.title || 'Live Stream');
+        });
+      }
       return card;
     }
 
@@ -2272,9 +2277,8 @@
       <td class="px-6 py-4 whitespace-nowrap text-right">
         <div class="flex items-center justify-end space-x-2">
           ${getActionButtonHTML(stream.status, stream.id, 'desktop')}
-            <button class="p-1.5 hover:bg-dark-700 rounded transition-colors" 
-                    title="Share stream link"
-                    onclick="shareStream('${stream.id}', '${stream.youtube_broadcast_id || ''}', '${stream.title.replace(/'/g, "\\'")}')">
+            <button class="stream-share-btn p-1.5 hover:bg-dark-700 rounded transition-colors"
+                    title="Share stream link">
               <i class="ti ti-share text-blue-400 hover:text-white"></i>
             </button>
             <button class="p-1.5 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" 
@@ -2291,6 +2295,12 @@
         </div>
       </td>
     `;
+      const shareBtn = row.querySelector('.stream-share-btn');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+          shareStream(stream.id, stream.youtube_broadcast_id || '', stream.title || 'Live Stream');
+        });
+      }
       return row;
     }
 
@@ -2476,44 +2486,191 @@
           restoreButtons();
         });
     }
-    function shareStream(streamId, videoId, title) {
-      if (!videoId) {
-        showToast('info', 'Share link is only available for YouTube API streams.');
-        return;
+    function fallbackCopyText(text) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.setAttribute('readonly', '');
+      textArea.style.position = 'fixed';
+      textArea.style.top = '0';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      try {
+        return document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback copy failed:', err);
+        return false;
+      } finally {
+        document.body.removeChild(textArea);
       }
-      const url = `https://youtube.com/live/${videoId}?feature=share`;
-      
-      if (navigator.share) {
-        navigator.share({
-          title: title || 'Live Stream',
-          url: url
-        }).catch(err => {
-          // Fallback if share cancelled
-          console.log('Share error/cancel:', err);
-        });
-      } else {
-        // Fallback to clipboard
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(() => {
-            showToast('success', 'Link copied to clipboard!');
-          }).catch(err => {
-            showToast('error', 'Failed to copy link.');
+    }
+
+    function copyTextToClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text)
+          .then(() => true)
+          .catch(err => {
+            console.warn('Clipboard API failed, using fallback copy:', err);
+            return fallbackCopyText(text);
           });
-        } else {
-          // Very old browser fallback
-          const textArea = document.createElement("textarea");
-          textArea.value = url;
-          document.body.appendChild(textArea);
-          textArea.select();
-          try {
-            document.execCommand('copy');
-            showToast('success', 'Link copied to clipboard!');
-          } catch (err) {
-            showToast('error', 'Failed to copy link.');
+      }
+
+      return Promise.resolve(fallbackCopyText(text));
+    }
+
+    function closeShareLinkModal() {
+      const dialog = document.getElementById('share-link-modal');
+      if (!dialog) return;
+
+      const modalContent = dialog.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.classList.replace('opacity-100', 'opacity-0');
+        modalContent.classList.replace('scale-100', 'scale-95');
+      }
+
+      setTimeout(() => {
+        document.body.classList.remove('overflow-hidden');
+        dialog.remove();
+      }, 200);
+    }
+
+    function openShareLinkModal(title, url) {
+      const existingModal = document.getElementById('share-link-modal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      const dialog = document.createElement('div');
+      dialog.id = 'share-link-modal';
+      dialog.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300';
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('aria-labelledby', 'share-link-title');
+      dialog.innerHTML = `
+        <div class="transform transition-all duration-300 opacity-0 scale-95 modal-content max-w-lg w-full mx-4">
+          <div class="bg-dark-800 rounded-lg shadow-xl border border-gray-600/50 overflow-hidden">
+            <div class="px-6 py-5 flex items-start gap-4">
+              <div class="w-12 h-12 rounded-full bg-blue-600/10 flex items-center justify-center shrink-0">
+                <i class="ti ti-share text-blue-400 text-2xl"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 id="share-link-title" class="text-lg font-medium text-white">Share Stream Link</h3>
+                <p id="share-link-stream-title" class="text-gray-400 text-sm mt-1 truncate"></p>
+              </div>
+              <button id="share-link-close-btn" class="p-2 -mr-2 -mt-2 rounded hover:bg-dark-700 text-gray-400 hover:text-white transition-colors" title="Close">
+                <i class="ti ti-x text-lg"></i>
+              </button>
+            </div>
+            <div class="px-6 pb-5 space-y-3">
+              <div class="flex items-center gap-2">
+                <input id="share-link-input" type="text" readonly
+                  class="w-full h-[42px] px-3 bg-dark-700 border border-gray-600 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary">
+                <button id="share-link-copy-btn" class="h-[42px] px-4 bg-primary hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2">
+                  <i class="ti ti-copy"></i>
+                  Copy
+                </button>
+              </div>
+              <div class="flex items-center justify-end gap-3 pt-1">
+                <button id="share-link-open-btn" class="px-4 py-2.5 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg transition-colors text-sm font-medium flex items-center gap-2">
+                  <i class="ti ti-external-link"></i>
+                  Open
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+      document.body.classList.add('overflow-hidden');
+
+      const modalContent = dialog.querySelector('.modal-content');
+      const titleEl = document.getElementById('share-link-stream-title');
+      const input = document.getElementById('share-link-input');
+      const copyBtn = document.getElementById('share-link-copy-btn');
+      const openBtn = document.getElementById('share-link-open-btn');
+      const closeBtn = document.getElementById('share-link-close-btn');
+
+      titleEl.textContent = title || 'Live Stream';
+      input.value = url;
+      input.addEventListener('focus', () => input.select());
+      input.addEventListener('click', () => input.select());
+
+      copyBtn.addEventListener('click', async () => {
+        const copied = await copyTextToClipboard(url);
+        if (copied) {
+          showToast('success', 'Link copied to clipboard!');
+          return;
+        }
+
+        input.focus();
+        showToast('warning', 'Unable to copy automatically. The link is selected for manual copy.');
+      });
+
+      openBtn.addEventListener('click', () => {
+        const openedWindow = window.open(url, '_blank');
+        if (!openedWindow) {
+          showToast('warning', 'Popup blocked. Copy the link and open it manually.');
+          return;
+        }
+
+        openedWindow.opener = null;
+      });
+
+      const closeModal = () => {
+        document.removeEventListener('keydown', escapeHandler);
+        closeShareLinkModal();
+      };
+      const escapeHandler = (event) => {
+        if (event.key === 'Escape') {
+          closeModal();
+        }
+      };
+
+      closeBtn.addEventListener('click', closeModal);
+      dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) {
+          closeModal();
+        }
+      });
+      document.addEventListener('keydown', escapeHandler);
+
+      setTimeout(() => {
+        if (modalContent) {
+          modalContent.classList.replace('opacity-0', 'opacity-100');
+          modalContent.classList.replace('scale-95', 'scale-100');
+        }
+        input.focus();
+        input.select();
+      }, 10);
+    }
+
+    async function shareStream(streamId, videoId, title) {
+      let broadcastId = videoId;
+      let streamTitle = title;
+
+      if (!broadcastId && streamId) {
+        try {
+          const response = await fetch(`/api/streams/${streamId}`);
+          const data = await response.json();
+          if (data.success && data.stream) {
+            broadcastId = data.stream.youtube_broadcast_id || '';
+            streamTitle = streamTitle || data.stream.title;
           }
-          document.body.removeChild(textArea);
+        } catch (error) {
+          console.warn('Unable to refresh stream data before sharing:', error);
         }
       }
+
+      if (!broadcastId) {
+        showToast('warning', 'Share link is not available yet. Start the YouTube API stream first.');
+        return;
+      }
+
+      const url = `https://youtube.com/live/${broadcastId}?feature=share`;
+      openShareLinkModal(streamTitle, url);
     }
 
     function stopStream(streamId) {

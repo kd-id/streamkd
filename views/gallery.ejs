@@ -155,8 +155,10 @@ function formatDuration(seconds) {
       <% }); %>
       <% } %>
       <% videos.forEach(function(video) { 
-        const isAudio = video.filepath && (video.filepath.includes('/audio/') || video.filepath.endsWith('.m4a') || video.filepath.endsWith('.aac') || video.filepath.endsWith('.mp3'));
-        const mediaType = isAudio ? 'audio' : 'video';
+        const filepath = (video.filepath || '').toLowerCase();
+        const isAudio = filepath.includes('/audio/') || filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3');
+        const isImage = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp');
+        const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
       %>
       <div class="gallery-grid-item file-item group bg-dark-700 rounded-lg overflow-hidden border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all cursor-pointer"
         data-id="<%= video.id %>" data-kind="file" data-title="<%= video.title %>" data-date="<%= video.upload_date %>" data-size="<%= video.file_size %>" data-type="<%= mediaType %>"
@@ -169,9 +171,16 @@ function formatDuration(seconds) {
               <i class="ti ti-music text-3xl text-primary"></i>
             </div>
           </div>
+          <% } else if (isImage) { %>
+          <img src="<%= video.filepath %>" alt="<%= video.title %>" class="w-full h-full object-cover">
+          <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <i class="ti ti-photo text-3xl text-white"></i>
+          </div>
           <% } else { %>
           <img src="<%= video.thumbnail_path %>" alt="<%= video.title %>" class="w-full h-full object-cover">
           <% } %>
+          
+          <% if (!isImage) { %>
           <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <div class="bg-primary/90 w-10 h-10 rounded-full flex items-center justify-center">
               <i class="ti ti-player-play-filled text-white"></i>
@@ -180,9 +189,15 @@ function formatDuration(seconds) {
           <span class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
             <%= formatDuration(video.duration) %>
           </span>
+          <% } %>
+
           <% if (isAudio) { %>
           <span class="absolute top-2 left-2 bg-primary/80 text-white text-xs px-1.5 py-0.5 rounded">
             <i class="ti ti-music text-xs mr-1"></i>Audio
+          </span>
+          <% } else if (isImage) { %>
+          <span class="absolute top-2 left-2 bg-blue-500/80 text-white text-xs px-1.5 py-0.5 rounded">
+            <i class="ti ti-photo text-xs mr-1"></i>Image
           </span>
           <% } %>
         </div>
@@ -254,8 +269,10 @@ function formatDuration(seconds) {
             <% }); %>
             <% } %>
             <% videos.forEach(function(video) { 
-              const isAudio = video.filepath && (video.filepath.includes('/audio/') || video.filepath.endsWith('.m4a') || video.filepath.endsWith('.aac') || video.filepath.endsWith('.mp3'));
-              const mediaType = isAudio ? 'audio' : 'video';
+              const filepath = (video.filepath || '').toLowerCase();
+              const isAudio = filepath.includes('/audio/') || filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3');
+              const isImage = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp');
+              const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
             %>
             <tr class="gallery-list-item file-item-row group hover:bg-dark-700 transition-colors cursor-pointer"
               data-id="<%= video.id %>" data-kind="file" data-title="<%= video.title %>" data-date="<%= video.upload_date %>" data-size="<%= video.file_size %>" data-type="<%= mediaType %>"
@@ -266,6 +283,8 @@ function formatDuration(seconds) {
                   <div class="w-12 h-8 rounded overflow-hidden bg-[#181818] flex-shrink-0 relative flex items-center justify-center">
                     <% if (isAudio) { %>
                     <i class="ti ti-music text-primary"></i>
+                    <% } else if (isImage) { %>
+                    <i class="ti ti-photo text-blue-400"></i>
                     <% } else { %>
                     <img src="<%= video.thumbnail_path %>" alt="" class="w-full h-full object-cover">
                     <% } %>
@@ -275,7 +294,7 @@ function formatDuration(seconds) {
                   </div>
                 </div>
               </td>
-              <td class="px-4 py-3 text-sm text-gray-400"><%= formatDuration(video.duration) %></td>
+              <td class="px-4 py-3 text-sm text-gray-400"><%= isImage ? '--' : formatDuration(video.duration) %></td>
               <td class="px-4 py-3 text-sm text-gray-400"><%= formatFileSize(video.file_size) %></td>
               <td class="px-4 py-3 text-sm text-gray-400"><%= new Date(video.upload_date).toLocaleDateString() %></td>
               <td class="px-4 py-3 text-right">
@@ -339,6 +358,9 @@ function formatDuration(seconds) {
           <button type="button" id="tabVideo" class="flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors" onclick="switchUploadTab('video')">
             <i class="ti ti-video mr-2"></i>Video
           </button>
+          <button type="button" id="tabImage" class="flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors" onclick="switchUploadTab('image')">
+            <i class="ti ti-photo mr-2"></i>Image
+          </button>
           <button type="button" id="tabAudio" class="flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors" onclick="switchUploadTab('audio')">
             <i class="ti ti-music mr-2"></i>Audio
           </button>
@@ -353,14 +375,14 @@ function formatDuration(seconds) {
                 <i id="dropzoneIcon" class="ti ti-cloud-upload text-2xl text-gray-400"></i>
               </div>
               <div>
-                <p id="dropzoneText" class="text-gray-300">Drag and drop video files here</p>
+                <p id="dropzoneText" class="text-gray-300">Drag and drop video or image files here</p>
                 <p class="text-gray-500 text-sm">Or click to browse</p>
               </div>
               <label class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors inline-block cursor-pointer">
                 <span>Select files</span>
-                <input type="file" name="media" accept="video/mp4,video/avi,video/quicktime" multiple class="hidden" id="mediaFileInput">
+                <input type="file" name="media" accept="video/mp4,video/avi,video/quicktime,image/jpeg,image/png,image/webp" multiple class="hidden" id="mediaFileInput">
               </label>
-              <p id="dropzoneFormats" class="text-gray-500 text-xs">Supported formats: MP4, AVI, MOV (max 50GB)</p>
+              <p id="dropzoneFormats" class="text-gray-500 text-xs">Supported formats: MP4, AVI, MOV, JPG, PNG, WEBP (max 50GB)</p>
             </div>
           </div>
           <div id="selectedFileInfo" class="hidden">
@@ -517,25 +539,35 @@ function switchUploadTab(type) {
   currentUploadType = type;
   document.getElementById('uploadType').value = type;
   const tabVideo = document.getElementById('tabVideo');
+  const tabImage = document.getElementById('tabImage');
   const tabAudio = document.getElementById('tabAudio');
   const dropzoneIcon = document.getElementById('dropzoneIcon');
   const dropzoneText = document.getElementById('dropzoneText');
   const dropzoneFormats = document.getElementById('dropzoneFormats');
   const mediaFileInput = document.getElementById('mediaFileInput');
   
+  // Reset tabs
+  [tabVideo, tabImage, tabAudio].forEach(tab => {
+    if (tab) tab.className = 'flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors';
+  });
+
   if (type === 'video') {
     tabVideo.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
-    tabAudio.className = 'flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors';
     dropzoneIcon.className = 'ti ti-video text-2xl text-gray-400';
     dropzoneText.textContent = 'Drag and drop video files here';
     dropzoneFormats.textContent = 'Supported formats: MP4, AVI, MOV (max 50GB)';
     mediaFileInput.accept = 'video/mp4,video/avi,video/quicktime';
+  } else if (type === 'image') {
+    tabImage.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
+    dropzoneIcon.className = 'ti ti-photo text-2xl text-gray-400';
+    dropzoneText.textContent = 'Drag and drop image files here';
+    dropzoneFormats.textContent = 'Supported formats: JPG, JPEG, PNG, WEBP';
+    mediaFileInput.accept = 'image/jpeg,image/png,image/webp';
   } else {
-    tabVideo.className = 'flex-1 py-2 px-4 rounded-lg bg-dark-700 text-gray-400 hover:text-white transition-colors';
     tabAudio.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
     dropzoneIcon.className = 'ti ti-music text-2xl text-gray-400';
     dropzoneText.textContent = 'Drag and drop audio files here';
-    dropzoneFormats.textContent = 'Supported formats: MP3, WAV';
+    dropzoneFormats.textContent = 'Supported formats: MP3, WAV, AAC, M4A';
     mediaFileInput.accept = 'audio/mpeg,audio/mp3,audio/wav,audio/aac,audio/mp4,audio/x-m4a,audio/ogg,audio/flac';
   }
   resetUploadForm();
@@ -627,6 +659,22 @@ function playMedia(mediaId, mediaTitle, mediaType) {
               <source src="/stream/${mediaId}" type="audio/mp4">
               Your browser does not support the audio element.
             </audio>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (mediaType === 'image') {
+    modal.innerHTML = `
+      <div class="relative w-full max-w-4xl mx-auto">
+        <div class="bg-dark-800 rounded-lg overflow-hidden shadow-xl">
+          <div class="flex items-center justify-between p-4 border-b border-gray-700">
+            <h3 class="text-lg font-medium truncate pr-4">${mediaTitle || 'View Image'}</h3>
+            <button id="close-player-btn" class="text-gray-400 hover:text-white">
+              <i class="ti ti-x text-xl"></i>
+            </button>
+          </div>
+          <div class="flex items-center justify-center bg-black/40 min-h-[300px] max-h-[80vh] overflow-auto p-4">
+            <img src="/stream/${mediaId}" class="max-w-full max-h-full object-contain shadow-2xl rounded" alt="${mediaTitle}">
           </div>
         </div>
       </div>

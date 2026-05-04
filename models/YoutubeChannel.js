@@ -37,6 +37,10 @@ class YoutubeChannel {
     });
   }
 
+  static findByExternalId(channelExternalId, userId) {
+    return this.findByChannelId(userId, channelExternalId);
+  }
+
   static findDefault(userId) {
     return new Promise((resolve, reject) => {
       db.get(

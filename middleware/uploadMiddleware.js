@@ -43,13 +43,13 @@ const thumbnailStorage = multer.diskStorage({
 });
 
 const videoFilter = (req, file, cb) => {
-  const allowedFormats = ['video/mp4', 'video/avi', 'video/quicktime'];
+  const allowedFormats = ['video/mp4', 'video/avi', 'video/quicktime', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
   const fileExt = path.extname(file.originalname).toLowerCase();
-  const allowedExts = ['.mp4', '.avi', '.mov'];
+  const allowedExts = ['.mp4', '.avi', '.mov', '.jpg', '.jpeg', '.png', '.webp'];
   if (allowedFormats.includes(file.mimetype) || allowedExts.includes(fileExt)) {
     cb(null, true);
   } else {
-    cb(new Error('Only .mp4, .avi, and .mov formats are allowed'), false);
+    cb(new Error('Only .mp4, .avi, .mov, .jpg, .jpeg, .png, and .webp formats are allowed'), false);
   }
 };
 

@@ -121,6 +121,11 @@
           <span class="text-xs mt-1">Playlist</span>
           <span class="sidebar-tooltip group-hover:scale-100">Playlist Manager</span>
         </a>
+        <a href="/prompt-generator" class="sidebar-icon group <%= active === 'prompt-generator' ? 'bg-primary' : '' %>">
+          <i class="ti ti-sparkles text-xl"></i>
+          <span class="text-xs mt-1">AI Prompt</span>
+          <span class="sidebar-tooltip group-hover:scale-100">Prompt Generator</span>
+        </a>
         <a href="/history" class="sidebar-icon group <%= active === 'history' ? 'bg-primary' : '' %>">
           <i class="ti ti-history text-xl"></i>
           <span class="text-xs mt-1">History</span>
@@ -243,6 +248,10 @@
       <a href="/playlist" class="bottom-nav-item <%= active === 'playlist' ? 'bottom-nav-active' : '' %>">
         <i class="ti ti-playlist"></i>
         <span>Playlist</span>
+      </a>
+      <a href="/prompt-generator" class="bottom-nav-item <%= active === 'prompt-generator' ? 'bottom-nav-active' : '' %>">
+        <i class="ti ti-sparkles"></i>
+        <span>AI Prompt</span>
       </a>
       <a href="/settings#ai" id="mobile-ai-config" class="bottom-nav-item <%= active === 'ai-settings' ? 'bottom-nav-active' : '' %>">
         <i class="ti ti-robot"></i>

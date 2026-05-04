@@ -135,6 +135,12 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
+function isImageFile(filepath) {
+  if (!filepath) return false;
+  const ext = path.extname(filepath).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
+}
+
 app.use(async (req, res, next) => {
   if (req.session && req.session.userId) {
     try {
@@ -1781,6 +1787,41 @@ app.post('/api/videos/upload', isAuthenticated, (req, res, next) => {
     const filePath = `/uploads/videos/${req.file.filename}`;
     const fullFilePath = path.join(__dirname, 'public', filePath);
     const fileSize = req.file.size;
+    const isImage = isImageFile(req.file.filename);
+
+    if (isImage) {
+      try {
+        const thumbnailFilename = `thumb-${path.parse(req.file.filename).name}.jpg`;
+        const thumbnailPath = `/uploads/thumbnails/${thumbnailFilename}`;
+
+        await generateImageThumbnail(fullFilePath, thumbnailFilename);
+
+        const videoData = {
+          title,
+          filepath: filePath,
+          thumbnail_path: thumbnailPath,
+          file_size: fileSize,
+          duration: 0,
+          format: path.extname(req.file.filename).substring(1),
+          resolution: null,
+          bitrate: null,
+          fps: null,
+          user_id: req.session.userId,
+          folder_id: folderId
+        };
+
+        const video = await Video.create(videoData);
+        return res.json({
+          success: true,
+          message: 'Image uploaded successfully',
+          video
+        });
+      } catch (err) {
+        console.error('Error processing image upload:', err);
+        return res.status(500).json({ success: false, error: 'Failed to process image' });
+      }
+    }
+
     await new Promise((resolve, reject) => {
       ffmpeg.ffprobe(fullFilePath, (err, metadata) => {
         if (err) {
@@ -1805,7 +1846,6 @@ app.post('/api/videos/upload', isAuthenticated, (req, res, next) => {
         }
         const thumbnailFilename = `thumb-${path.parse(req.file.filename).name}.jpg`;
         const thumbnailPath = `/uploads/thumbnails/${thumbnailFilename}`;
-        const fullThumbnailPath = path.join(__dirname, 'public', thumbnailPath);
         ffmpeg(fullFilePath)
           .screenshots({
             timestamps: ['10%'],
@@ -2260,6 +2300,18 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
     const stat = fs.statSync(videoPath);
     const fileSize = stat.size;
     const range = req.headers.range;
+    const ext = path.extname(video.filepath).toLowerCase();
+
+    let contentType = 'video/mp4';
+    if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+    else if (ext === '.png') contentType = 'image/png';
+    else if (ext === '.webp') contentType = 'image/webp';
+    else if (ext === '.gif') contentType = 'image/gif';
+    else if (ext === '.mp3') contentType = 'audio/mpeg';
+    else if (ext === '.wav') contentType = 'audio/wav';
+    else if (ext === '.aac') contentType = 'audio/aac';
+    else if (ext === '.m4a') contentType = 'audio/mp4';
+
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'no-store');
@@ -2273,13 +2325,13 @@ app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': contentType,
       });
       file.pipe(res);
     } else {
       res.writeHead(200, {
         'Content-Length': fileSize,
-        'Content-Type': 'video/mp4',
+        'Content-Type': contentType,
       });
       fs.createReadStream(videoPath).pipe(res);
     }
@@ -2573,55 +2625,101 @@ app.post('/api/ai/config', isAuthenticated, async (req, res) => {
 
 app.post('/api/ai/test-key', isAuthenticated, async (req, res) => {
   try {
-    const { providerType, key, keys, endpoint, model } = req.body;
-    const testProvider = { 
-        type: providerType, 
-        key: key || (keys && keys[0]), 
-        keys: keys,
-        endpoint, 
-        model 
-    };
+    const { type, providerType, key, keys, endpoint, model } = req.body;
+    const finalType = type || providerType;
     
-    // Simple test by generating a tiny piece of text
-    const testKeyword = "test";
-    const prompt = `Say "API Key is valid" if you can read this.`;
-    
-    let result;
-    if (providerType === 'gemini') {
-        const url = endpoint || `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${testProvider.key}`;
-        const response = await axios.post(url, {
-            contents: [{ parts: [{ text: prompt }] }]
-        });
-        result = response.data.candidates[0].content.parts[0].text;
-    } else if (providerType === 'openai' || providerType === 'groq' || providerType === 'custom') {
-        const url = endpoint || (providerType === 'openai' ? 'https://api.openai.com/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions');
-        const response = await axios.post(url, {
-            model: model || 'gpt-4o-mini',
-            messages: [{ role: 'user', content: prompt }]
-        }, {
-            headers: { 'Authorization': `Bearer ${testProvider.key}` }
-        });
-        result = response.data.choices[0].message.content;
-    } else if (providerType === 'claude') {
-        const url = endpoint || 'https://api.anthropic.com/v1/messages';
-        const response = await axios.post(url, {
+    // Support testing multiple keys
+    const allKeys = keys && keys.length > 0 ? keys : (key ? [key] : []);
+    if (allKeys.length === 0) return res.status(400).json({ success: false, error: 'API Key is required' });
+
+    const prompt = `Say "API Key is valid" and nothing else.`;
+    const results = [];
+    let rateLimits = null;
+
+    for (let i = 0; i < allKeys.length; i++) {
+      const testKey = allKeys[i];
+      try {
+        let response;
+        if (finalType === 'gemini') {
+          const url = endpoint 
+            ? AIService.joinUrl(endpoint, `/models/${model || 'gemini-1.5-flash'}:generateContent?key=${testKey}`) 
+            : `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${testKey}`;
+          response = await axios.post(url, { contents: [{ parts: [{ text: prompt }] }] });
+        } else if (finalType === 'claude') {
+          const base = endpoint || 'https://api.anthropic.com';
+          const url = AIService.joinUrl(base, '/v1/messages');
+          response = await axios.post(url, {
             model: model || 'claude-3-haiku-20240307',
-            max_tokens: 10,
+            max_tokens: 50,
             messages: [{ role: 'user', content: prompt }]
-        }, {
-            headers: { 
-                'x-api-key': testProvider.key,
-                'anthropic-version': '2023-06-01',
-                'Content-Type': 'application/json'
-            }
-        });
-        result = response.data.content[0].text;
+          }, { headers: { 'x-api-key': testKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' } });
+        } else {
+          const base = endpoint || (
+            finalType === 'openai' ? 'https://api.openai.com/v1' : 
+            (finalType === 'groq' ? 'https://api.groq.com/openai/v1' : 
+            (finalType === 'grok' ? 'https://api.x.ai/v1' : 
+            (finalType === 'openrouter' ? 'https://openrouter.ai/api/v1' : '')))
+          );
+          const url = AIService.joinUrl(base, '/chat/completions');
+          
+          let headers = { 'Authorization': `Bearer ${testKey}` };
+          if (finalType === 'openrouter') {
+            headers['HTTP-Referer'] = 'https://streamflow.app';
+            headers['X-Title'] = 'StreamFlow';
+          }
+
+          response = await axios.post(url, {
+            model: model || (
+              finalType === 'openai' ? 'gpt-4o-mini' : 
+              finalType === 'groq' ? 'llama3-8b-8192' :
+              finalType === 'grok' ? 'grok-beta' :
+              'meta-llama/llama-3-8b-instruct'
+            ),
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 20
+          }, { headers });
+        }
+
+        // Extract text result
+        let text = '';
+        if (finalType === 'gemini') {
+          text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'OK';
+        } else if (finalType === 'claude') {
+          text = response.data?.content?.[0]?.text || 'OK';
+        } else {
+          text = response.data?.choices?.[0]?.message?.content || 'OK';
+        }
+
+        // Extract rate limit headers
+        const h = response.headers || {};
+        const limits = {
+          requestsLimit: h['x-ratelimit-limit-requests'] || h['x-ratelimit-limit'] || h['anthropic-ratelimit-requests-limit'] || null,
+          requestsRemaining: h['x-ratelimit-remaining-requests'] || h['x-ratelimit-remaining'] || h['anthropic-ratelimit-requests-remaining'] || null,
+          tokensLimit: h['x-ratelimit-limit-tokens'] || h['anthropic-ratelimit-tokens-limit'] || null,
+          tokensRemaining: h['x-ratelimit-remaining-tokens'] || h['anthropic-ratelimit-tokens-remaining'] || null,
+          resetAt: h['x-ratelimit-reset-requests'] || h['x-ratelimit-reset'] || h['anthropic-ratelimit-requests-reset'] || null
+        };
+        if (limits.requestsLimit || limits.tokensLimit) rateLimits = limits;
+
+        results.push({ index: i, keyHint: `${testKey.substring(0, 6)}...${testKey.slice(-4)}`, success: true, result: text.trim() });
+      } catch (err) {
+        const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+        results.push({ index: i, keyHint: `${testKey.substring(0, 6)}...${testKey.slice(-4)}`, success: false, error: msg });
+      }
     }
 
-    res.json({ success: true, message: 'API Key is valid', result });
+    const allSuccess = results.every(r => r.success);
+    const successCount = results.filter(r => r.success).length;
+    
+    res.json({ 
+      success: allSuccess, 
+      result: `${successCount}/${allKeys.length} keys valid`,
+      results,
+      rateLimits
+    });
   } catch (error) {
-    console.error('AI Key test error:', error.response?.data || error.message);
-    res.status(400).json({ success: false, error: error.response?.data?.error?.message || error.message });
+    const msg = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+    res.status(500).json({ success: false, error: msg });
   }
 });
 
@@ -2645,6 +2743,78 @@ app.post('/api/ai/generate', isAuthenticated, async (req, res) => {
     res.json({ success: true, variations });
   } catch (error) {
     console.error('AI Generation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/ai/generate-image', isAuthenticated, async (req, res) => {
+  try {
+    const { prompt, size } = req.body;
+    if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required' });
+    
+    console.log('[Generate Image] Prompt:', prompt.substring(0, 80), '| Size:', size);
+    const imageUrl = await AIService.generateImage(prompt, { size: size || '1024x1024' });
+    res.json({ success: true, imageUrl });
+  } catch (error) {
+    console.error('Image Generation error:', error.message);
+    const userMessage = error.message.includes('No active AI provider')
+      ? 'No AI provider configured for image generation. Go to Settings > AI to enable one.'
+      : error.message.includes('404')
+      ? 'Image model not found. Check your AI provider model name in Settings > AI.'
+      : error.message;
+    res.status(500).json({ success: false, error: userMessage });
+  }
+});
+
+app.post('/api/ai/save-history', isAuthenticated, async (req, res) => {
+  try {
+    const { prompt, imageUrl } = req.body;
+    const db = require('./db/database');
+    const result = await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO ai_prompt_history (user_id, prompt_text, image_url, created_at) VALUES (?, ?, ?, ?)',
+        [req.session.userId, prompt, imageUrl, new Date().toISOString()],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
+    });
+    res.json({ success: true, id: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/gallery/add-from-url', isAuthenticated, async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    const path = require('path');
+    const fs = require('fs');
+    const axios = require('axios');
+    
+    const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    const filename = `ai-${Date.now()}.png`;
+    const uploadPath = path.join(__dirname, 'public', 'uploads', 'gallery', filename);
+    
+    // Ensure directory exists
+    const dir = path.dirname(uploadPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    
+    fs.writeFileSync(uploadPath, response.data);
+    
+    const db = require('./db/database');
+    await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO gallery (user_id, file_path, file_type, created_at) VALUES (?, ?, ?, ?)',
+        [req.session.userId, `/uploads/gallery/${filename}`, 'image/png', new Date().toISOString()],
+        (err) => err ? reject(err) : resolve()
+      );
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Gallery save error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -4233,7 +4403,13 @@ app.get('/playlist', isAuthenticated, async (req, res) => {
       const filepath = (video.filepath || '').toLowerCase();
       if (filepath.includes('/audio/')) return false;
       if (filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3')) return false;
+      // Exclude images from Videos tab
+      if (isImageFile(filepath)) return false;
       return true;
+    });
+    const images = allVideos.filter(video => {
+      const filepath = (video.filepath || '').toLowerCase();
+      return isImageFile(filepath);
     });
     const audios = allVideos.filter(video => {
       const filepath = (video.filepath || '').toLowerCase();
@@ -4245,6 +4421,7 @@ app.get('/playlist', isAuthenticated, async (req, res) => {
       user: await User.findById(req.session.userId),
       playlists: playlists,
       videos: videos,
+      images: images,
       audios: audios
     });
   } catch (error) {
@@ -4515,6 +4692,8 @@ app.get('/rotations', isAuthenticated, async (req, res) => {
     });
     const playlists = await Playlist.findAll(req.session.userId);
     const rotations = await Rotation.findAll(req.session.userId);
+    const Stream = require('./models/Stream');
+    const streams = await Stream.findAll(req.session.userId);
     const YoutubeChannel = require('./models/YoutubeChannel');
     const youtubeChannels = await YoutubeChannel.findAll(req.session.userId);
     const isYoutubeConnected = youtubeChannels.length > 0;
@@ -4526,6 +4705,7 @@ app.get('/rotations', isAuthenticated, async (req, res) => {
       user: user,
       videos: videos,
       playlists: playlists,
+      streams: streams,
       rotations: rotations,
       youtubeConnected: isYoutubeConnected,
       youtubeChannels: youtubeChannels,
@@ -4598,8 +4778,8 @@ app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, r
       const item = parsedItems[i];
       const thumbnailFile = uploadedFileMap.get(`thumbnail_${item.thumbnail_upload_index}`);
       
-      let thumbnailPath = null;
-      let originalThumbnailPath = null;
+      let thumbnailPath = item.thumbnail_path && item.thumbnail_path !== 'rotations' ? item.thumbnail_path : null;
+      let originalThumbnailPath = item.original_thumbnail_path || null;
       if (thumbnailFile && thumbnailFile.size > 0) {
         const originalFilename = thumbnailFile.filename;
         const thumbFilename = `thumb-${path.parse(originalFilename).name}.jpg`;
@@ -4786,6 +4966,115 @@ app.post('/api/rotations/:id/stop', isAuthenticated, async (req, res) => {
   } catch (error) {
     console.error('Error stopping rotation:', error);
     res.status(500).json({ success: false, error: 'Failed to stop rotation' });
+  }
+});
+
+app.post('/api/ai/save-history', isAuthenticated, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    const id = await AIService.saveHistory(req.session.userId, prompt);
+    res.json({ success: true, id });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/prompt-generator', isAuthenticated, async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    const history = await AIService.getHistory(req.session.userId);
+    res.render('prompt-generator', {
+      title: 'AI Image Prompt Generator',
+      active: 'prompt-generator',
+      user: user,
+      history: history
+    });
+  } catch (error) {
+    console.error('Prompt generator page error:', error);
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/api/ai/magic-prompt', isAuthenticated, async (req, res) => {
+  try {
+    const { keywords } = req.body;
+    if (!keywords || keywords.trim().split(/\s+/).length < 2) {
+        return res.status(400).json({ success: false, error: 'Minimal 2 kata kunci diperlukan.' });
+    }
+    const fullPrompt = await AIService.generateMagicPrompt(keywords);
+    res.json({ success: true, prompt: fullPrompt });
+  } catch (error) {
+    console.error('Magic prompt error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// NOTE: /api/ai/generate-image is defined earlier in this file (around line 2682) with full size param support
+
+app.post('/api/ai/save-to-gallery', isAuthenticated, async (req, res) => {
+  try {
+    const { imageUrl, prompt, historyId } = req.body;
+    if (!imageUrl) return res.status(400).json({ success: false, error: 'Image URL is required' });
+
+    const response = await axios({
+      url: imageUrl,
+      method: 'GET',
+      responseType: 'stream'
+    });
+
+    const fileName = `ai-${Date.now()}.png`;
+    const galleryDir = path.join(__dirname, 'public', 'uploads', 'gallery');
+    if (!fs.existsSync(galleryDir)) {
+      fs.mkdirSync(galleryDir, { recursive: true });
+    }
+    
+    const filePath = path.join(galleryDir, fileName);
+    const writer = fs.createWriteStream(filePath);
+    response.data.pipe(writer);
+
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    const stats = fs.statSync(filePath);
+    const relativePath = `/uploads/gallery/${fileName}`;
+    
+    const videoData = {
+      title: prompt ? (prompt.substring(0, 50) + (prompt.length > 50 ? '...' : '')) : 'AI Generated Image',
+      filepath: relativePath,
+      thumbnail_path: relativePath,
+      file_size: stats.size,
+      format: 'png',
+      resolution: '1024x1024',
+      user_id: req.session.userId,
+      folder_id: null
+    };
+
+    const newVideo = await Video.create(videoData);
+
+    if (historyId) {
+        const { db } = require('./db/database');
+        await new Promise((resolve, reject) => {
+            db.run('UPDATE ai_prompt_history SET saved_video_id = ? WHERE id = ?', [newVideo.id, historyId], (err) => {
+                if (err) reject(err); else resolve();
+            });
+        });
+    }
+
+    res.json({ success: true, message: 'Image saved to gallery', video: newVideo });
+  } catch (error) {
+    console.error('Error saving image to gallery:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/ai/prompt-history/:id', isAuthenticated, async (req, res) => {
+  try {
+    const success = await AIService.deleteHistory(req.params.id, req.session.userId);
+    res.json({ success });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

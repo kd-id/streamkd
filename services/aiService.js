@@ -159,6 +159,8 @@ class AIService {
      * Build the prompt based on user requirements
      */
     static buildPrompt(keyword, category, options = {}) {
+        if (options.customPrompt) return options.customPrompt;
+
         const isTheme = options.isTheme || false;
         const targetField = options.targetField || 'all';
 
@@ -487,17 +489,6 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
         }
     }
     
-    /**
-            });
-
-            const text = response.data.choices[0].message.content;
-            return this.parseResponse(text);
-        } catch (error) {
-            console.error('Custom AI API Error:', error.response?.data || error.message);
-            throw new Error(`Custom AI API Error: ${error.message}`);
-        }
-    }
-
 
     /**
      * Parse the AI response into variations
@@ -541,6 +532,15 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
                 variations.push({ title, description, tags: tagsParsed });
             }
         });
+
+        // Special case for Magic Prompt expansion
+        if (variations.length === 0 && text.includes('NEGATIVE:')) {
+             variations.push({
+                 title: 'Magic Prompt',
+                 description: text.trim(),
+                 tags: ''
+             });
+        }
 
         // Fallback for single variation without "VARIASI" marker
         if (variations.length === 0) {
@@ -627,6 +627,208 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
             console.error(`Error fetching models for ${type}:`, error.message);
             return [];
         }
+    }
+    /**
+     * Generate a rich, detailed prompt from simple keywords (Magical Prompt)
+     */
+    static async generateMagicPrompt(keywords) {
+        const config = await this.getConfig();
+        if (!config || !config.providers) {
+            throw new Error('AI configuration not found.');
+        }
+
+        const prompt = `Expand these keywords into a highly detailed, professional Master Prompt for image generation. 
+        Keywords: ${keywords}
+        
+        Rules:
+        1. Follow the Master Formula: Subject, Activity, Location, Art Style, Lighting, Mood, Color Palette, Camera Composition, Technical Params.
+        2. Output MUST be PURE TEXT. Do NOT use brackets like [Subject] or labels like "Subject:". 
+        3. Just provide the rich descriptive text itself.
+        4. At the end, provide a Negative Prompt section labeled "NEGATIVE:".
+        
+        Output format:
+        [Vivid descriptive master prompt text here]
+        
+        NEGATIVE: [Negative prompt text here]`;
+
+        const response = await this.generateMetadata(keywords, '', { customPrompt: prompt });
+        return response[0].description;
+    }
+
+    /**
+     * Generate an image using AI providers (with failover & key rolling)
+     */
+    static async generateImage(prompt, options = {}) {
+        const config = await this.getConfig();
+        if (!config || !config.providers) {
+            throw new Error('AI configuration not found.');
+        }
+
+        // Normalize keys
+        config.providers.forEach(p => this.normalizeProviderKeys(p));
+
+        // Types that can potentially generate images
+        const imageCapableTypes = ['openai', 'gemini', 'custom', 'openrouter'];
+
+        // Filter: active providers that either have an imageModel set OR are a known image-capable type
+        const imageProviders = config.providers.filter(p => 
+            p.active && p.keys && p.keys.length > 0 &&
+            (p.imageModel || imageCapableTypes.includes(p.type))
+        );
+
+        console.log('[AIService] Image-capable providers:', imageProviders.map(p => `${p.type}(${p.id || p.type}, imageModel:${p.imageModel || 'default'}, keys:${p.keys.length})`));
+
+        if (imageProviders.length === 0) {
+            throw new Error('No active AI provider supports image generation. Enable OpenAI (dall-e-3), Gemini (imagen), or a Custom provider with an Image Model in Settings > AI.');
+        }
+
+        // Default image models per provider type
+        const defaultImageModels = {
+            'openai': 'dall-e-3',
+            'gemini': 'imagen-3.0-generate-001',
+            'custom': 'dall-e-3',
+            'openrouter': 'openai/dall-e-3'
+        };
+
+        const lastImageProviderIndex = config.lastImageProviderIndex || 0;
+        const errors = [];
+
+        // Failover loop: try each image-capable provider
+        for (let attempt = 0; attempt < imageProviders.length; attempt++) {
+            const providerIndex = (lastImageProviderIndex + attempt) % imageProviders.length;
+            const provider = imageProviders[providerIndex];
+
+            // Key rolling within this provider
+            const { key, index: keyIndex } = this.getNextKey(provider.keys, provider.lastUsedImageKeyIndex || -1);
+            if (!key) continue;
+
+            provider.lastUsedImageKeyIndex = keyIndex;
+            config.lastImageProviderIndex = (providerIndex + 1) % imageProviders.length;
+            await this.saveConfig(config);
+
+            const activeImageModel = provider.imageModel || defaultImageModels[provider.type] || 'dall-e-3';
+
+            console.log(`[AIService] Image attempt ${attempt + 1}/${imageProviders.length}: ${provider.type} (${provider.id || provider.type}) | model: ${activeImageModel} | key: ${key.substring(0, 8)}...`);
+
+            try {
+                const result = await this._callImageProvider(provider, key, activeImageModel, prompt, options);
+                if (result) return result;
+                throw new Error('Provider returned no image data');
+            } catch (error) {
+                const status = error.response?.status;
+                const errorMsg = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+                console.error(`[AIService] Image provider ${provider.type} failed (${status}):`, errorMsg);
+                errors.push(`${provider.type}: ${errorMsg}`);
+                console.log(`[AIService] Failing over to next image provider...`);
+            }
+        }
+
+        throw new Error(`All image providers failed:\n${errors.join('\n')}`);
+    }
+
+    /**
+     * Internal: Call a specific provider's image generation API
+     */
+    static async _callImageProvider(provider, key, imageModel, prompt, options) {
+        let url = '';
+        let payload = {};
+        let headers = { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
+        const base = provider.endpoint;
+
+        if (provider.type === 'gemini') {
+            url = base 
+                ? `${base.replace(/\/$/, '')}/v1beta/models/${imageModel}:predict?key=${key}`
+                : `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:predict?key=${key}`;
+            payload = { 
+                instances: [{ prompt }],
+                parameters: { sampleCount: 1 }
+            };
+            headers = { 'Content-Type': 'application/json' };
+        } else if (provider.type === 'openrouter') {
+            url = (base || 'https://openrouter.ai/api/v1').replace(/\/$/, '') + '/images/generations';
+            payload = { model: imageModel, prompt, n: 1, size: options.size || '1024x1024' };
+            headers['HTTP-Referer'] = 'https://streamflow.app';
+            headers['X-Title'] = 'StreamFlow';
+        } else {
+            let cleanBase = (base || 'https://api.openai.com/v1').replace(/\/$/, '');
+            if (provider.type === 'openai' && !cleanBase.includes('/v1')) cleanBase += '/v1';
+            url = `${cleanBase}/images/generations`;
+            payload = { model: imageModel, prompt, n: 1, size: options.size || '1024x1024' };
+        }
+
+        console.log(`[AIService] Image API call: ${url}`);
+        const response = await axios.post(url, payload, { headers, timeout: 120000 });
+
+        if (provider.type === 'gemini') {
+            if (response.data?.predictions?.[0]?.bytesBase64Encoded) {
+                return `data:image/png;base64,${response.data.predictions[0].bytesBase64Encoded}`;
+            }
+        }
+        if (response.data?.data?.[0]?.url) return response.data.data[0].url;
+        if (response.data?.data?.[0]?.b64_json) return `data:image/png;base64,${response.data.data[0].b64_json}`;
+        if (response.data?.images?.[0]?.url) return response.data.images[0].url;
+        if (response.data?.images?.[0]) return response.data.images[0];
+
+        return null;
+    }
+
+    /**
+     * Save a prompt and its result to history
+     */
+    static async saveHistory(userId, promptText, imageUrl = null) {
+        const { db } = require('../db/database');
+        const { v4: uuidv4 } = require('uuid');
+        const id = uuidv4();
+        return new Promise((resolve, reject) => {
+            db.run(
+                'INSERT INTO ai_prompt_history (id, user_id, prompt_text, image_url) VALUES (?, ?, ?, ?)',
+                [id, userId, promptText, imageUrl],
+                function(err) {
+                    if (err) {
+                        console.error('Error saving prompt history:', err);
+                        return reject(err);
+                    }
+                    resolve(id);
+                }
+            );
+        });
+    }
+
+    /**
+     * Get prompt history for a user
+     */
+    static async getHistory(userId) {
+        const { db } = require('../db/database');
+        return new Promise((resolve, reject) => {
+            db.all(
+                'SELECT * FROM ai_prompt_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+                [userId],
+                (err, rows) => {
+                    if (err) {
+                        console.error('Error fetching prompt history:', err);
+                        return reject(err);
+                    }
+                    resolve(rows || []);
+                }
+            );
+        });
+    }
+
+    /**
+     * Delete a history item
+     */
+    static async deleteHistory(id, userId) {
+        const { db } = require('../db/database');
+        return new Promise((resolve, reject) => {
+            db.run(
+                'DELETE FROM ai_prompt_history WHERE id = ? AND user_id = ?',
+                [id, userId],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.changes > 0);
+                }
+            );
+        });
     }
 }
 

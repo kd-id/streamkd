@@ -32,6 +32,12 @@ function shuffleArray(array) {
   return shuffled;
 }
 
+function isImageFile(filepath) {
+  if (!filepath) return false;
+  const ext = path.extname(filepath).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.webp', '.bmp'].includes(ext);
+}
+
 const activeStreams = new Map();
 const streamLogs = new Map();
 const streamRetryCount = new Map();
@@ -218,13 +224,20 @@ function runFFprobe(filePath) {
   });
 }
 
-function validateYouTubeCopyVideoProbe(probeData, label) {
+function validateYouTubeCopyVideoProbe(probeData, label, isImage = false) {
   const videoStream = getPrimaryStream(probeData, 'video');
   if (!videoStream) {
+    // Check if it's an image that might not have a "video" stream in probe but we can still use it
+    if (isImage) return null;
     return buildCopyModeCompatibilityError(label, 'video stream tidak ditemukan');
   }
 
   const videoCodec = (videoStream.codec_name || '').toLowerCase();
+  // Allow mjpeg if it's an image file, as we will transcode it
+  if (isImage && videoCodec === 'mjpeg') {
+    return null;
+  }
+
   if (!YOUTUBE_COPY_ALLOWED_VIDEO_CODECS.has(videoCodec)) {
     return buildCopyModeCompatibilityError(label, `codec video ${videoCodec || 'unknown'} tidak didukung`);
   }
@@ -310,13 +323,27 @@ async function validateCopyModeCompatibilityForInput({
       throw new Error('Playlist is empty');
     }
 
+    let isSlideshow = true;
+    for (const item of playlist.videos) {
+      if (!isImageFile(item.filepath)) {
+        isSlideshow = false;
+        break;
+      }
+    }
+
+    // If it's a slideshow, it will be automatically transcoded and scaled, so we don't need copy mode validation
+    if (isSlideshow) {
+      return;
+    }
+
     let referenceVideoStream = null;
 
     for (let index = 0; index < playlist.videos.length; index++) {
       const video = playlist.videos[index];
+      const isImg = isImageFile(video.filepath);
       const probeData = await runFFprobe(resolvePublicFilePath(video.filepath));
       const label = buildMediaLabel(video, index, 'Video');
-      const compatibilityError = validateYouTubeCopyVideoProbe(probeData, label);
+      const compatibilityError = validateYouTubeCopyVideoProbe(probeData, label, isImg);
 
       if (compatibilityError) {
         throw createUnsupportedCopyModeError(compatibilityError);
@@ -352,9 +379,11 @@ async function validateCopyModeCompatibilityForInput({
     throw new Error('Video not found');
   }
 
+  const isImg = isImageFile(video.filepath);
   const compatibilityError = validateYouTubeCopyVideoProbe(
     await runFFprobe(resolvePublicFilePath(video.filepath)),
-    buildMediaLabel(video, 0, 'Video')
+    buildMediaLabel(video, 0, 'Video'),
+    isImg
   );
 
   if (compatibilityError) {
@@ -410,31 +439,227 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
+  const hasAudio = playlist.audios && playlist.audios.length > 0;
+  
+  // Detect if this is a Slideshow (Radio Mode)
+  // A slideshow is a playlist where all "videos" are actually images
+  let isSlideshow = true;
+  for (const item of playlist.videos) {
+    if (!isImageFile(item.filepath)) {
+      isSlideshow = false;
+      break;
+    }
+  }
+
+  const resolution = stream.resolution || '1280x720';
+  const bitrate = stream.bitrate || 2500;
+  const fps = stream.fps || 30;
+  const transitionType = playlist.transition_type || 'none';
+  const transitionDuration = parseFloat(playlist.transition_duration) || 1.0;
+  const imageDuration = 10; // Total duration per image
+
   let videoPaths = [];
   const videos = playlist.is_shuffle ? shuffleArray(playlist.videos) : playlist.videos;
 
-  for (const video of videos) {
-    const relPath = video.filepath.startsWith('/') ? video.filepath.substring(1) : video.filepath;
-    const fullPath = path.join(projectRoot, 'public', relPath);
-    if (!fs.existsSync(fullPath)) {
-      throw new Error(`Video file not found: ${fullPath}`);
+  if (isSlideshow) {
+    const util = require('util');
+    const { exec } = require('child_process');
+    const execPromise = util.promisify(exec);
+    
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+      const relPath = video.filepath.startsWith('/') ? video.filepath.substring(1) : video.filepath;
+      const fullPath = path.join(projectRoot, 'public', relPath);
+      if (!fs.existsSync(fullPath)) {
+        throw new Error(`Media file not found: ${fullPath}`);
+      }
+      
+      // Standardize image based on transition mode
+      // All modes now use normalized .jpg images to minimize CPU load and startup time
+      const normPath = path.join(tempDir, `norm_${stream.id}_${i}.jpg`);
+      const cmd = `"${ffmpegPath}" -y -i "${fullPath}" -vf "scale=${resolution}:force_original_aspect_ratio=increase,crop=${resolution.replace('x', ':')}" -c:v mjpeg -q:v 2 -pix_fmt yuvj420p "${normPath}"`;
+      try {
+        await execPromise(cmd);
+        videoPaths.push(normPath);
+      } catch (e) {
+        console.error(`Failed to normalize image to JPG ${fullPath}:`, e);
+        videoPaths.push(fullPath); 
+      }
     }
-    videoPaths.push(fullPath);
+  } else {
+    for (const video of videos) {
+      const relPath = video.filepath.startsWith('/') ? video.filepath.substring(1) : video.filepath;
+      const fullPath = path.join(projectRoot, 'public', relPath);
+      if (!fs.existsSync(fullPath)) {
+        throw new Error(`Media file not found: ${fullPath}`);
+      }
+      videoPaths.push(fullPath);
+    }
   }
 
   const concatFile = path.join(tempDir, `playlist_${stream.id}.txt`);
   let content = '';
   const loopCount = stream.loop_video ? 10000 : 1;
 
-  for (let i = 0; i < loopCount; i++) {
-    for (const vp of videoPaths) {
-      content += `file '${vp.replace(/\\/g, '/')}'\n`;
+  if (isSlideshow) {
+    // Image Slideshow Concat Format
+    // We generate images, so we need 'duration' directives
+    for (let i = 0; i < loopCount; i++) {
+      for (const vp of videoPaths) {
+        content += `file '${vp.replace(/\\/g, '/')}'\n`;
+        content += `duration ${imageDuration}\n`;
+      }
+    }
+    if (videoPaths.length > 0) {
+      content += `file '${videoPaths[videoPaths.length - 1].replace(/\\/g, '/')}'\n`;
+    }
+  } else {
+    // Normal Video Concat Format
+    for (let i = 0; i < loopCount; i++) {
+      for (const vp of videoPaths) {
+        content += `file '${vp.replace(/\\/g, '/')}'\n`;
+      }
     }
   }
   fs.writeFileSync(concatFile, content);
 
-  const hasAudio = playlist.audios && playlist.audios.length > 0;
+  if (isSlideshow) {
+    // --- SLIDESHOW MODE (Images) ---
+    // If no audio is provided, we must generate a silent audio track because YouTube RTMP requires an audio stream
+    let audioInputArgs = [];
+    if (hasAudio) {
+      let audioPaths = [];
+      const audios = playlist.is_shuffle ? shuffleArray(playlist.audios) : playlist.audios;
 
+      for (const audio of audios) {
+        const relPath = audio.filepath.startsWith('/') ? audio.filepath.substring(1) : audio.filepath;
+        const fullPath = path.join(projectRoot, 'public', relPath);
+        if (!fs.existsSync(fullPath)) {
+          throw new Error(`Audio file not found: ${fullPath}`);
+        }
+        audioPaths.push(fullPath);
+      }
+
+      const audioConcatFile = path.join(tempDir, `playlist_audio_${stream.id}.txt`);
+      let audioContent = '';
+      for (let i = 0; i < 10000; i++) {
+        for (const ap of audioPaths) {
+          audioContent += `file '${ap.replace(/\\/g, '/')}'\n`;
+        }
+      }
+      fs.writeFileSync(audioConcatFile, audioContent);
+      audioInputArgs = ['-f', 'concat', '-safe', '0', '-i', audioConcatFile];
+    } else {
+      audioInputArgs = ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
+    }
+
+    // Since images are already normalized and scaled, we don't need scale/crop here.
+    // We only need fps filter to ensure RTMP gets constant frame rate and realtime filter for pacing.
+    if (transitionType === 'none' || videoPaths.length <= 1) {
+      const filterGraph = hasAudio
+        ? `[0:v]fps=${fps},realtime[bg];[1:a]showwaves=s=${resolution.split('x')[0]}x200:mode=line:colors=cyan|purple:rate=25[spec];[bg][spec]overlay=0:H-h:format=auto[v]`
+        : `[0:v]fps=${fps},realtime[v]`;
+
+      return [
+        '-nostdin',
+        '-loglevel', 'warning',
+        '-stats',
+        '-re',
+        '-fflags', '+genpts+igndts+discardcorrupt',
+        '-avoid_negative_ts', 'make_zero',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatFile,
+        ...audioInputArgs,
+        '-filter_complex', 
+        filterGraph,
+        '-map', '[v]',
+        '-map', '1:a:0',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-profile:v', 'main',
+        '-pix_fmt', 'yuv420p',
+        '-b:v', `${bitrate}k`,
+        '-maxrate', `${bitrate}k`,
+        '-bufsize', `${bitrate * 2}k`,
+        '-s', resolution,
+        '-r', fps,
+        '-g', fps * 2,
+        '-keyint_min', fps,
+        '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ];
+    }
+
+    // --- COMPLEX XFADE MODE (Seamless Circular Loop) ---
+    const maxImages = 20; 
+    const limitedPaths = videoPaths.slice(0, maxImages);
+    
+    // To make it seamless, we add the first image to the end again
+    const circularPaths = [...limitedPaths, limitedPaths[0]];
+    const args = [
+      '-nostdin',
+      '-loglevel', 'warning',
+      '-stats',
+    ];
+
+    // Add inputs
+    circularPaths.forEach(path => {
+      args.push('-loop', '1', '-t', imageDuration.toString(), '-framerate', fps.toString(), '-i', path);
+    });
+
+    // Add audio input (Input index will be circularPaths.length)
+    args.push(...audioInputArgs);
+
+    // Build filter complex
+    let filter = '';
+    // 1. Pass-through video inputs (already scaled)
+    for (let i = 0; i < circularPaths.length; i++) {
+      filter += `[${i}:v]copy[v${i}];`;
+    }
+
+    // 2. Chain xfade including the last-to-first transition
+    let lastLabel = 'v0';
+    for (let i = 0; i < circularPaths.length - 1; i++) {
+      const offset = (i + 1) * (imageDuration - transitionDuration);
+      const nextLabel = `xf${i}`;
+      filter += `[${lastLabel}][v${i+1}]xfade=transition=${transitionType}:duration=${transitionDuration}:offset=${offset.toFixed(2)}[${nextLabel}];`;
+      lastLabel = nextLabel;
+    }
+
+    // 3. Perfect Loop Calculation
+    // The total duration for a seamless loop of N images is N * (imageDuration - transitionDuration)
+    const loopDuration = limitedPaths.length * (imageDuration - transitionDuration);
+    
+    // For 1-core VPS, looping large xfade graphs causes OOM. We limit size, but user expects infinite loop.
+    // We will keep loop for now but they should be warned if they use it.
+    filter += `[${lastLabel}]loop=loop=-1:size=${Math.floor(loopDuration * fps)}:start=0,realtime[loopv];`;
+    
+    if (hasAudio) {
+      filter += `[${circularPaths.length}:a]showwaves=s=${resolution.split('x')[0]}x200:mode=line:colors=cyan|purple:rate=25[spec];[loopv][spec]overlay=0:H-h:format=auto[v]`;
+    } else {
+      filter += `[loopv]copy[v]`; // Just pass through if no audio spectrum is needed
+    }
+
+    args.push('-filter_complex', filter);
+    args.push('-map', '[v]');
+    args.push('-map', `${circularPaths.length}:a:0`);
+    args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', 'main', '-pix_fmt', 'yuv420p');
+    args.push('-b:v', `${bitrate}k`, '-maxrate', `${bitrate}k`, '-bufsize', `${bitrate * 2}k`);
+    args.push('-s', resolution, '-r', fps, '-g', fps * 2, '-keyint_min', fps, '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`);
+    args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '44100');
+    args.push('-f', 'flv', '-flvflags', 'no_duration_filesize', rtmpUrl);
+
+    return args;
+  }
+
+  // --- NORMAL MODE (Existing Logic) ---
   if (!hasAudio) {
     if (!stream.use_advanced_settings) {
       return [
@@ -580,10 +805,6 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     ];
   }
 
-  const resolution = stream.resolution || '1280x720';
-  const bitrate = stream.bitrate || 2500;
-  const fps = stream.fps || 30;
-
   return [
     '-nostdin',
     '-loglevel', 'warning',
@@ -647,8 +868,42 @@ async function buildFFmpegArgs(stream) {
 
   const rtmpUrl = `${stream.rtmp_url.replace(/\/$/, '')}/${stream.stream_key}`;
   const loopValue = stream.loop_video ? '-1' : '0';
+  const isImg = isImageFile(video.filepath);
 
   if (!stream.use_advanced_settings) {
+    if (isImg) {
+      // Force transcode for single image even if advanced settings are off
+      const resolution = stream.resolution || '1280x720';
+      const bitrate = stream.bitrate || 2500;
+      const fps = stream.fps || 30;
+      
+      return [
+        '-nostdin',
+        '-loglevel', 'warning',
+        '-stats',
+        '-re',
+        '-loop', '1',
+        '-i', videoPath,
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-pix_fmt', 'yuv420p',
+        '-b:v', `${bitrate}k`,
+        '-maxrate', `${bitrate}k`,
+        '-bufsize', `${bitrate * 2}k`,
+        '-s', resolution,
+        '-r', fps,
+        '-g', fps * 2,
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-t', '36000', // Long duration for image loop
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ];
+    }
+
     return [
       '-nostdin',
       '-loglevel', 'warning',
@@ -796,7 +1051,17 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
     const originalStartTime = stream.start_time;
     const originalEndTime = stream.end_time;
 
-    await validateCopyModeCompatibility(stream);
+    try {
+      await validateCopyModeCompatibility(stream);
+    } catch (compatibilityError) {
+      if (compatibilityError.code === 'UNSUPPORTED_COPY_MODE_MEDIA') {
+        addStreamLog(streamId, `Copy mode unsupported (${compatibilityError.message}). Forcing Advanced Settings (Transcoding).`);
+        stream.use_advanced_settings = true;
+      } else {
+        throw compatibilityError;
+      }
+    }
+
 
     if (stream.is_youtube_api) {
       const youtubeService = require('./youtubeService');

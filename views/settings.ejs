@@ -555,10 +555,47 @@
             </div>
           </div>
 
-          <!-- Active Model -->
-          <div id="ai-active-model-display" class="flex items-center gap-2 bg-primary/10 rounded-lg px-4 py-2.5 mb-5 border border-primary/20">
+          <!-- Active Text Model -->
+          <div id="ai-active-model-display" class="flex items-center gap-2 bg-primary/10 rounded-lg px-4 py-2.5 mb-4 border border-primary/20">
             <i class="ti ti-sparkles text-primary text-lg"></i>
-            <span class="text-sm text-white">Active: <strong id="ai-active-model-name" class="text-primary">Not selected</strong></span>
+            <span class="text-sm text-white">Text: <strong id="ai-active-model-name" class="text-primary">Not selected</strong></span>
+          </div>
+
+          <!-- ═══════ Image Model Section ═══════ -->
+          <div class="mb-5 pt-4 border-t border-gray-700/40">
+            <div class="flex items-center justify-between mb-3">
+              <label class="flex items-center gap-1.5 text-xs font-semibold text-orange-400 uppercase tracking-wider">
+                <i class="ti ti-photo text-xs"></i> Image Model
+                <span class="text-gray-600 normal-case font-normal text-[9px]">(separate from text)</span>
+              </label>
+            </div>
+
+            <!-- Active Image Model Badge -->
+            <div id="ai-active-image-model-status" class="flex items-center gap-2 bg-orange-500/10 rounded-lg px-4 py-2 mb-3 border border-orange-500/20 hidden">
+              <i class="ti ti-photo text-orange-400 text-sm"></i>
+              <span class="text-xs text-white">Image: <strong id="ai-current-image-model-name" class="text-orange-400"></strong></span>
+            </div>
+
+            <!-- Image Model List -->
+            <div id="ai-image-model-list" class="space-y-1 max-h-[140px] overflow-y-auto rounded-lg bg-dark-900 border border-gray-700 p-1 mb-2">
+              <p class="text-[9px] text-gray-600 text-center py-3">Click "Update List" above to detect image models</p>
+            </div>
+
+            <!-- Manual Image Model Input (fallback) -->
+            <div class="flex gap-2">
+              <input type="text" id="ai-image-model-input" 
+                class="flex-1 bg-dark-900 text-white text-[11px] rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-orange-500 border border-gray-700 placeholder-gray-600" 
+                placeholder="Or type manually: dall-e-3, imagen-3.0-generate-001">
+              <button type="button" onclick="selectImageModelManual()" class="px-2 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg text-[10px] font-bold border border-orange-500/20 transition-colors">
+                <i class="ti ti-check text-xs"></i> Set
+              </button>
+            </div>
+
+            <p class="text-[9px] text-gray-600 mt-2 leading-relaxed">
+              <i class="ti ti-info-circle text-[9px]"></i> Does NOT affect title/desc/tags generation.
+              <br>• OpenAI: <code class="text-gray-500">dall-e-3</code> · Gemini: <code class="text-gray-500">imagen-3.0-generate-001</code>
+              <br><span class="text-red-500/70">⚠ Gemini Flash/Pro cannot generate images — use Imagen model</span>
+            </p>
           </div>
 
           <!-- Test Connection -->
@@ -568,9 +605,14 @@
             </label>
             <button type="button" onclick="testAIConnection()" id="test-ai-connection-btn" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-dark-900 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm border border-gray-700">
               <i class="ti ti-wifi"></i>
-              <span>Run Test</span>
+              <span>Test All Keys</span>
             </button>
-            <div id="ai-test-result" class="hidden mt-3 p-3 rounded-lg text-sm"></div>
+            
+            <!-- Per-key test results -->
+            <div id="ai-test-results"></div>
+            
+            <!-- Rate Limits Display -->
+            <div id="ai-rate-limits"></div>
           </div>
         </div>
       </div>
