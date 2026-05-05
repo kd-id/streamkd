@@ -460,6 +460,75 @@ async function validateCopyModeCompatibilityForInput({
   }
 }
 
+async function checkPlaylistCopyCompatible(videoPaths) {
+  try {
+    let referenceStream = null;
+    for (const vp of videoPaths) {
+      const probeData = await runFFprobe(vp);
+      const videoStream = getPrimaryStream(probeData, 'video');
+      if (!videoStream) return false;
+
+      const codec = (videoStream.codec_name || '').toLowerCase();
+      if (codec !== 'h264') return false;
+      if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
+
+      // Check consistency across playlist items
+      if (!referenceStream) {
+        referenceStream = videoStream;
+      } else {
+        if (videoStream.width !== referenceStream.width || videoStream.height !== referenceStream.height) return false;
+        if (getFrameRateLabel(videoStream) !== getFrameRateLabel(referenceStream)) return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkSingleVideoCopyCompatible(videoPath) {
+  try {
+    const probeData = await runFFprobe(videoPath);
+    const videoStream = getPrimaryStream(probeData, 'video');
+    if (!videoStream) return false;
+    const codec = (videoStream.codec_name || '').toLowerCase();
+    if (codec !== 'h264') return false;
+    if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getAdaptiveSettings(stream, activeCount) {
+  const resolution = stream.resolution || '1280x720';
+  const bitrate = stream.bitrate || 2500;
+  const fps = stream.fps || 30;
+
+  let finalBitrate = bitrate;
+  let finalResolution = resolution;
+  let preset = 'ultrafast';
+
+  if (activeCount === 0) {
+    preset = 'superfast';
+  } else if (activeCount === 1) {
+    finalBitrate = Math.round(bitrate * 0.85);
+    preset = 'ultrafast';
+  } else {
+    finalBitrate = Math.round(bitrate * 0.7);
+    preset = 'ultrafast';
+    if (resolution.includes('1080') || resolution.includes('1920')) {
+      finalResolution = '1280x720';
+    }
+  }
+
+  if (activeCount > 0) {
+    console.log(`[StreamingService] Adaptive: ${activeCount} active. ${finalResolution} @ ${finalBitrate}k preset=${preset}`);
+  }
+
+  return { finalBitrate, finalResolution, preset, fps };
+}
+
 function waitForStreamStartup(streamId, ffmpegProcess, startupState) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -744,21 +813,9 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       ];
     }
 
-    const resolution = stream.resolution || '1280x720';
-    const bitrate = stream.bitrate || 2500;
-    const fps = stream.fps || 30;
-
-    // Optimized Adaptive Logic for Playlist
+    // Adaptive Quality for Playlist (no custom audio, advanced settings on)
     const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
-    let finalBitrate = bitrate;
-    let finalResolution = resolution;
-
-    if (activeCount > 0) {
-        finalBitrate = Math.round(bitrate * (activeCount === 1 ? 0.85 : 0.7));
-        if (activeCount >= 2 && (resolution.includes('1080') || resolution.includes('1920'))) {
-            finalResolution = '1280x720';
-        }
-    }
+    const adaptive = getAdaptiveSettings(stream, activeCount);
 
     return [
       '-nostdin',
@@ -771,18 +828,18 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       '-safe', '0',
       '-i', concatFile,
       '-c:v', 'libx264',
-      '-preset', 'superfast',
+      '-preset', adaptive.preset,
       '-tune', 'zerolatency',
       '-profile:v', 'main',
       '-pix_fmt', 'yuv420p',
-      '-b:v', `${finalBitrate}k`,
-      '-maxrate', `${finalBitrate}k`,
-      '-bufsize', `${finalBitrate * 2}k`,
-      '-s', finalResolution,
-      '-r', fps,
-      '-g', fps * 2,
-      '-keyint_min', fps,
-      '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+      '-b:v', `${adaptive.finalBitrate}k`,
+      '-maxrate', `${adaptive.finalBitrate}k`,
+      '-bufsize', `${adaptive.finalBitrate * 2}k`,
+      '-s', adaptive.finalResolution,
+      '-r', adaptive.fps,
+      '-g', adaptive.fps * 2,
+      '-keyint_min', adaptive.fps,
+      '-x264opts', `keyint=${adaptive.fps * 2}:min-keyint=${adaptive.fps}:no-scenecut`,
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ar', '44100',
@@ -813,23 +870,15 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   }
   fs.writeFileSync(audioConcatFile, audioContent);
 
-  if (!stream.use_advanced_settings) {
-    const resolution = stream.resolution || '1280x720';
-    const bitrate = stream.bitrate || 2500;
-    const fps = stream.fps || 30;
+  // --- SMART COPY + ADAPTIVE QUALITY for Playlist with Custom Audio ---
+  // If all videos are already H.264/yuv420p (optimized), use -c:v copy = near-zero CPU
+  // Otherwise fallback to transcode with adaptive quality based on active stream count
+  const canCopyVideo = await checkPlaylistCopyCompatible(videoPaths);
+  const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
-    // Optimized Adaptive Logic for Playlist with Custom Audio
-    const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
-    let finalBitrate = bitrate;
-    let finalResolution = resolution;
-
-    if (activeCount > 0) {
-        finalBitrate = Math.round(bitrate * (activeCount === 1 ? 0.85 : 0.7));
-        if (activeCount >= 2 && (resolution.includes('1080') || resolution.includes('1920'))) {
-            finalResolution = '1280x720';
-        }
-    }
-
+  if (canCopyVideo) {
+    // COPY MODE: Video already optimized — CPU ~5% instead of 100%
+    console.log(`[StreamingService] Copy Mode: Video+Audio playlist (${activeCount} active streams). Video copy, audio encode only.`);
     return [
       '-nostdin',
       '-loglevel', 'warning',
@@ -846,29 +895,25 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       '-i', audioConcatFile,
       '-map', '0:v:0',
       '-map', '1:a:0',
-      '-c:v', 'libx264',
-      '-preset', 'superfast',
-      '-tune', 'zerolatency',
-      '-profile:v', 'main',
-      '-pix_fmt', 'yuv420p',
-      '-b:v', `${finalBitrate}k`,
-      '-maxrate', `${finalBitrate}k`,
-      '-bufsize', `${finalBitrate * 2}k`,
-      '-s', finalResolution,
-      '-r', fps,
-      '-g', fps * 2,
-      '-keyint_min', fps,
-      '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+      '-c:v', 'copy',
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ar', '44100',
+      '-shortest',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
       rtmpUrl
     ];
   }
 
-  return [
+  // TRANSCODE MODE: Video not compatible for copy — use adaptive quality
+  const adaptive = getAdaptiveSettings(stream, activeCount);
+  const transcodePreset = stream.use_advanced_settings ? adaptive.preset : adaptive.preset;
+  const audioCodec = stream.use_advanced_settings ? 'copy' : 'aac';
+
+  console.log(`[StreamingService] Transcode Mode: Video+Audio playlist. ${adaptive.finalResolution} @ ${adaptive.finalBitrate}k preset=${transcodePreset}`);
+
+  const transcodeArgs = [
     '-nostdin',
     '-loglevel', 'warning',
     '-stats',
@@ -885,24 +930,27 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     '-map', '0:v:0',
     '-map', '1:a:0',
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
+    '-preset', transcodePreset,
     '-tune', 'zerolatency',
-    '-profile:v', 'high',
-    '-level', '4.1',
-    '-b:v', `${bitrate}k`,
-    '-maxrate', `${Math.round(bitrate * 1.1)}k`,
-    '-bufsize', `${bitrate * 2}k`,
+    '-profile:v', 'main',
     '-pix_fmt', 'yuv420p',
-    '-g', String(fps * 2),
-    '-keyint_min', String(fps),
-    '-sc_threshold', '0',
-    '-s', resolution,
-    '-r', String(fps),
-    '-c:a', 'copy',
-    '-f', 'flv',
-    '-flvflags', 'no_duration_filesize',
-    rtmpUrl
+    '-b:v', `${adaptive.finalBitrate}k`,
+    '-maxrate', `${adaptive.finalBitrate}k`,
+    '-bufsize', `${adaptive.finalBitrate * 2}k`,
+    '-s', adaptive.finalResolution,
+    '-r', adaptive.fps,
+    '-g', adaptive.fps * 2,
+    '-keyint_min', adaptive.fps,
+    '-x264opts', `keyint=${adaptive.fps * 2}:min-keyint=${adaptive.fps}:no-scenecut`,
+    '-c:a', audioCodec,
   ];
+
+  if (audioCodec === 'aac') {
+    transcodeArgs.push('-b:a', '128k', '-ar', '44100');
+  }
+
+  transcodeArgs.push('-f', 'flv', '-flvflags', 'no_duration_filesize', rtmpUrl);
+  return transcodeArgs;
 }
 
 async function buildFFmpegArgs(stream) {
@@ -985,25 +1033,42 @@ async function buildFFmpegArgs(stream) {
     ];
   }
 
-  const resolution = stream.resolution || '1280x720';
   const bitrate = isImg ? getSlideshowBitrate(stream) : stream.bitrate || 2500;
   const fps = isImg ? getSlideshowFps(stream) : stream.fps || 30;
 
-  // Optimized Adaptive Logic for 1 Core VPS
-  // Focuses on maintaining "Excellent" health status with minimal CPU overhead
+  // --- SMART COPY + ADAPTIVE QUALITY for Single Video (Advanced Settings) ---
+  const canCopy = !isImg && await checkSingleVideoCopyCompatible(videoPath);
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
-  let finalBitrate = bitrate;
-  let finalResolution = resolution;
 
-  if (activeCount > 0) {
-      // Balance bitrate to prevent network/CPU saturation on 1 Core
-      finalBitrate = Math.round(bitrate * (activeCount === 1 ? 0.85 : 0.7));
-      // Only downscale if absolutely necessary (3+ streams on 1 core)
-      if (activeCount >= 2 && (resolution.includes('1080') || resolution.includes('1920'))) {
-          finalResolution = '1280x720';
-      }
-      console.log(`[StreamingService] Adaptive Tuning: ${activeCount} active. Using ${finalResolution} @ ${finalBitrate}k (CPU Optimized)`);
+  if (canCopy) {
+    // COPY MODE: Video already H.264/yuv420p — near-zero CPU
+    console.log(`[StreamingService] Copy Mode: Single video (${activeCount} active). Skipping transcode.`);
+    return [
+      '-nostdin',
+      '-loglevel', 'warning',
+      '-stats',
+      '-re',
+      '-fflags', '+genpts+igndts+discardcorrupt',
+      '-avoid_negative_ts', 'make_zero',
+      '-stream_loop', loopValue,
+      '-i', videoPath,
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ar', '44100',
+      '-f', 'flv',
+      '-flvflags', 'no_duration_filesize',
+      rtmpUrl
+    ];
   }
+
+  // TRANSCODE MODE with Adaptive Quality for 1 Core VPS
+  const adaptive = getAdaptiveSettings(stream, activeCount);
+  // Override bitrate/fps for slideshow images
+  const finalBitrate = isImg ? bitrate : adaptive.finalBitrate;
+  const finalResolution = isImg ? (stream.resolution || '1280x720') : adaptive.finalResolution;
+
+  console.log(`[StreamingService] Transcode: Single video. ${finalResolution} @ ${finalBitrate}k preset=${adaptive.preset}`);
 
   return [
     '-nostdin',
@@ -1015,18 +1080,18 @@ async function buildFFmpegArgs(stream) {
     '-stream_loop', loopValue,
     '-i', videoPath,
     '-c:v', 'libx264',
-    '-preset', 'superfast', // Superfast is the sweet spot for 1 Core Excellent Quality
-    '-tune', 'zerolatency',
+    '-preset', adaptive.preset,
+    '-tune', isImg ? 'stillimage' : 'zerolatency',
     '-profile:v', 'main',
-    '-pix_fmt', 'yuv420p', // Required for YouTube Excellent Health
+    '-pix_fmt', 'yuv420p',
     '-b:v', `${finalBitrate}k`,
-    '-maxrate', `${finalBitrate}k`, // Strict CBR for YouTube
+    '-maxrate', `${finalBitrate}k`,
     '-bufsize', `${finalBitrate * 2}k`,
     '-s', finalResolution,
     '-r', fps,
-    '-g', fps * 2, // Strict 2s Keyframe interval
+    '-g', fps * 2,
     '-keyint_min', fps,
-    '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`, // Enforce keyframes
+    '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
