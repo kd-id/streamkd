@@ -2664,8 +2664,8 @@ app.post('/api/ai/test-key', isAuthenticated, async (req, res) => {
           
           let headers = { 'Authorization': `Bearer ${testKey}` };
           if (finalType === 'openrouter') {
-            headers['HTTP-Referer'] = 'https://streamflow.app';
-            headers['X-Title'] = 'StreamFlow';
+            headers['HTTP-Referer'] = 'https://streamkd.app';
+            headers['X-Title'] = 'StreamKD';
           }
 
           response = await axios.post(url, {
@@ -5087,7 +5087,7 @@ const server = app.listen(port, '0.0.0.0', async () => {
   }
   
   const ipAddresses = getLocalIpAddresses();
-  console.log(`StreamFlow running at:`);
+  console.log(`StreamKD running at:`);
   if (ipAddresses && ipAddresses.length > 0) {
     ipAddresses.forEach(ip => {
       console.log(`  http://${ip}:${port}`);

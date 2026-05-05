@@ -466,8 +466,8 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
             // Ensure Referer header is NOT sent to avoid image loading issues
             const headers = { 
                 'Authorization': `Bearer ${key}`,
-                'HTTP-Referer': 'https://streamflow.app',
-                'X-Title': 'StreamFlow'
+                'HTTP-Referer': 'https://streamkd.app',
+                'X-Title': 'StreamKD'
             };
 
             const response = await axios.post(url, {
@@ -747,8 +747,8 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
         } else if (provider.type === 'openrouter') {
             url = (base || 'https://openrouter.ai/api/v1').replace(/\/$/, '') + '/images/generations';
             payload = { model: imageModel, prompt, n: 1, size: options.size || '1024x1024' };
-            headers['HTTP-Referer'] = 'https://streamflow.app';
-            headers['X-Title'] = 'StreamFlow';
+            headers['HTTP-Referer'] = 'https://streamkd.app';
+            headers['X-Title'] = 'StreamKD';
         } else {
             let cleanBase = (base || 'https://api.openai.com/v1').replace(/\/$/, '');
             if (provider.type === 'openai' && !cleanBase.includes('/v1')) cleanBase += '/v1';

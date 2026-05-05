@@ -2,7 +2,7 @@
 
 ![logo](https://github.com/user-attachments/assets/83d95886-2fbb-45c7-986a-e6c4d053bc55)
 
-## StreamFlow: Web-Based Multi-Platform Streaming
+## StreamKD: Web-Based Multi-Platform Streaming
 
 [![Version](https://img.shields.io/badge/version-2.2.2-blue.svg)](https://github.com/kd-id/streamkd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/kd-id/streamkd/blob/main/LICENSE)
@@ -10,7 +10,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/kd-id/streamkd?style=social)](https://github.com/kd-id/streamkd/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/kd-id/streamkd?style=social)](https://github.com/kd-id/streamkd/network/members)
 
-**StreamFlow** adalah platform live streaming berbasis web yang powerful dan mudah digunakan. Streaming ke YouTube, Facebook, dan platform RTMP lainnya secara bersamaan dengan satu aplikasi. Dilengkapi dengan video management, scheduled streaming, dan real-time monitoring untuk pengalaman streaming yang profesional.
+**StreamKD** adalah platform live streaming berbasis web yang powerful dan mudah digunakan. Streaming ke YouTube, Facebook, dan platform RTMP lainnya secara bersamaan dengan satu aplikasi. Dilengkapi dengan video management, scheduled streaming, dan real-time monitoring untuk pengalaman streaming yang profesional.
 
 [🚀 Installation](#-quick-installation) • [📖 Documentation](#-manual-installation) • [🐳 Docker](#-docker-deployment) • [🪛 Troubleshooting](#-troubleshooting) • [💬 Community](https://github.com/kd-id/streamkd/discussions)
 
@@ -85,7 +85,7 @@ Install Git:
 sudo apt install git -y
 ```
 
-### 2. Setup Project StreamFlow
+### 2. Setup Project StreamKD
 
 Clone repository:
 ```bash
@@ -94,7 +94,7 @@ git clone https://github.com/kd-id/streamkd
 
 Masuk ke direktori project:
 ```bash
-cd streamflow
+cd streamkd
 ```
 
 Install Paket Node.JS:
@@ -159,7 +159,7 @@ sudo npm install -g pm2
 
 Jalankan aplikasi dengan PM2:
 ```bash
-pm2 start app.js --name streamflow
+pm2 start app.js --name streamkd
 ```
 
 **Setup Auto-Restart saat Server Reboot:**
@@ -183,13 +183,13 @@ pm2 save
 pm2 status
 
 # Restart aplikasi
-pm2 restart streamflow
+pm2 restart streamkd
 
 # Stop aplikasi
-pm2 stop streamflow
+pm2 stop streamkd
 
 # Lihat logs aplikasi
-pm2 logs streamflow
+pm2 logs streamkd
 
 # Monitor resource usage
 pm2 monit
@@ -208,7 +208,7 @@ Contoh: `http://88.12.34.56:7575`
 Jika lupa password atau perlu reset akun:
 
 ```bash
-cd streamflow && node reset-password.js
+cd streamkd && node reset-password.js
 ```
 
 ## ⏰ Pengaturan Timezone Server
@@ -232,7 +232,7 @@ sudo timedatectl set-timezone Asia/Jakarta
 
 ### Restart aplikasi setelah mengubah timezone:
 ```bash
-pm2 restart streamflow
+pm2 restart streamkd
 ```
 
 ## 🐳 Docker Deployment
@@ -289,7 +289,7 @@ sudo kill -9 <PID>
 rm db/*.db
 
 # Restart aplikasi untuk membuat database baru
-pm2 restart streamflow
+pm2 restart streamkd
 ```
 
 ### Docker Troubleshooting

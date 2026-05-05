@@ -1,5 +1,5 @@
 {
-  "name": "streamflow",
+  "name": "streamkd",
   "version": "2.2.2",
   "description": "Cloud streaming solution with FFmpeg",
   "main": "app.js",
@@ -7,7 +7,7 @@
     "start": "node app.js",
     "dev": "nodemon app.js",
     "generate-secret": "node generate-secret.js",
-    "rebuild-native": "npm rebuild sqlite3 bcrypt --build-from-source",
+    "rebuild-native": "npm rebuild sqlite3 bcrypt",
     "postinstall": "npm run rebuild-native"
   },
   "dependencies": {

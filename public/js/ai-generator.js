@@ -1,5 +1,5 @@
 /**
- * AI Metadata Generator Logic for StreamFlow
+ * AI Metadata Generator Logic for StreamKD
  */
 
 let aiVariations = [];

@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'streamflow-v2-cache';
+const CACHE_NAME = 'streamkd-v2-cache';
 const CACHE_VERSION = '1.0.2';
 const FULL_CACHE_NAME = `${CACHE_NAME}-${CACHE_VERSION}`;
 

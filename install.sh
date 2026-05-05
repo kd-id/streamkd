@@ -2,7 +2,7 @@
 set -e
 
 echo "================================"
-echo "   StreamFlow Quick Installer  "
+echo "   StreamKD Quick Installer  "
 echo "================================"
 echo
 
@@ -90,13 +90,13 @@ fi
 # 8. Clone repository
 # ─────────────────────────────────────────
 echo "📥 Clone repository..."
-if [ -d "$HOME/streamflow" ]; then
-    echo "⚠️  Folder streamflow sudah ada, melakukan pull terbaru..."
-    cd "$HOME/streamflow"
+if [ -d "$HOME/streamkd" ]; then
+    echo "⚠️  Folder streamkd sudah ada, melakukan pull terbaru..."
+    cd "$HOME/streamkd"
     git pull
 else
-    git clone https://github.com/kd-id/streamkd "$HOME/streamflow"
-    cd "$HOME/streamflow"
+    git clone https://github.com/kd-id/streamkd "$HOME/streamkd"
+    cd "$HOME/streamkd"
 fi
 
 # ─────────────────────────────────────────
@@ -107,7 +107,7 @@ pnpm install
 
 echo "🔨 Approving & building native modules (sqlite3, bcrypt, ffmpeg)..."
 # Buat file .pnpmfile.cjs untuk allow semua build scripts secara otomatis
-cat > "$HOME/streamflow/.pnpmfile.cjs" << 'PNPMEOF'
+cat > "$HOME/streamkd/.pnpmfile.cjs" << 'PNPMEOF'
 function readPackage(pkg, context) {
   return pkg;
 }
@@ -127,16 +127,16 @@ pnpm install --ignore-scripts=false
 
 # Pastikan sqlite3 native binary terkompilasi
 echo "🔨 Rebuilding sqlite3 native binary..."
-cd "$HOME/streamflow/node_modules/.pnpm/sqlite3@5.1.7/node_modules/sqlite3" 2>/dev/null && \
+cd "$HOME/streamkd/node_modules/.pnpm/sqlite3@5.1.7/node_modules/sqlite3" 2>/dev/null && \
     npm run install --build-from-source 2>/dev/null || \
     node-pre-gyp install --fallback-to-build 2>/dev/null || true
-cd "$HOME/streamflow"
+cd "$HOME/streamkd"
 
 # Pastikan bcrypt native binary terkompilasi
 echo "🔨 Rebuilding bcrypt native binary..."
-cd "$HOME/streamflow/node_modules/.pnpm/bcrypt@6.0.0/node_modules/bcrypt" 2>/dev/null && \
+cd "$HOME/streamkd/node_modules/.pnpm/bcrypt@6.0.0/node_modules/bcrypt" 2>/dev/null && \
     npm run install --build-from-source 2>/dev/null || true
-cd "$HOME/streamflow"
+cd "$HOME/streamkd"
 
 pnpm run generate-secret
 
@@ -186,15 +186,15 @@ fi
 echo "✅ PM2 $(pm2 --version) berhasil disiapkan"
 
 # ─────────────────────────────────────────
-# 13. Start StreamFlow via PM2
+# 13. Start StreamKD via PM2
 # ─────────────────────────────────────────
-echo "▶️ Starting StreamFlow..."
-cd "$HOME/streamflow"
+echo "▶️ Starting StreamKD..."
+cd "$HOME/streamkd"
 
-# Jika sudah ada proses streamflow sebelumnya, delete dulu
-pm2 describe streamflow &> /dev/null && pm2 delete streamflow || true
+# Jika sudah ada proses streamkd sebelumnya, delete dulu
+pm2 describe streamkd &> /dev/null && pm2 delete streamkd || true
 
-pm2 start app.js --name streamflow
+pm2 start app.js --name streamkd
 pm2 save
 
 # ─────────────────────────────────────────
