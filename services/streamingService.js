@@ -112,6 +112,9 @@ const streamLogs = new Map();
 const streamRetryCount = new Map();
 const manuallyStoppingStreams = new Set();
 const startingStreams = new Set();
+const streamSpeedSamples = new Map();
+const streamQualityTier = new Map();
+const adaptiveDowngrading = new Set();
 
 const MAX_LOG_LINES = 50;
 const MAX_RETRY_ATTEMPTS = 15;
@@ -120,6 +123,19 @@ const MAX_RETRY_DELAY = 30000;
 const HEALTH_CHECK_INTERVAL = 30000;
 const SYNC_INTERVAL = 60000;
 const STREAM_START_TIMEOUT = 15000;
+
+// Adaptive Quality - Real-time speed monitoring
+const ADAPTIVE_SPEED_THRESHOLD = 0.9;
+const ADAPTIVE_SLOW_SAMPLES_NEEDED = 4;
+const ADAPTIVE_MAX_SAMPLES = 10;
+
+// Quality tiers: lower tier = lower quality = less CPU
+const QUALITY_TIERS = [
+  { resolution: '1280x720', bitrate: 2500, fps: 30, preset: 'ultrafast', label: 'HD 720p/30' },
+  { resolution: '1280x720', bitrate: 2000, fps: 24, preset: 'ultrafast', label: 'HD 720p/24' },
+  { resolution: '854x480',  bitrate: 1500, fps: 24, preset: 'ultrafast', label: 'SD 480p/24' },
+  { resolution: '640x360',  bitrate: 1000, fps: 20, preset: 'ultrafast', label: 'SD 360p/20' },
+];
 
 const YOUTUBE_COPY_ALLOWED_VIDEO_CODECS = new Set(['h264']);
 const YOUTUBE_COPY_ALLOWED_AUDIO_CODECS = new Set(['aac', 'mp3']);
@@ -158,6 +174,9 @@ function cleanupStreamData(streamId) {
   streamRetryCount.delete(streamId);
   manuallyStoppingStreams.delete(streamId);
   startingStreams.delete(streamId);
+  streamSpeedSamples.delete(streamId);
+  streamQualityTier.delete(streamId);
+  adaptiveDowngrading.delete(streamId);
 }
 
 function getRetryDelay(retryCount) {
@@ -189,6 +208,57 @@ function isYouTubeDestination(stream) {
 
 function isProgressLogLine(line) {
   return line.includes('frame=') || line.includes('time=') || line.includes('speed=');
+}
+
+
+function parseSpeedFromLine(line) {
+  const match = line.match(/speed=\s*([\d.]+)x/);
+  if (match) return parseFloat(match[1]);
+  return null;
+}
+
+function trackStreamSpeed(streamId, speed) {
+  if (!streamSpeedSamples.has(streamId)) streamSpeedSamples.set(streamId, []);
+  const samples = streamSpeedSamples.get(streamId);
+  samples.push({ speed, time: Date.now() });
+  if (samples.length > ADAPTIVE_MAX_SAMPLES) samples.shift();
+}
+
+function shouldDowngradeQuality(streamId) {
+  const samples = streamSpeedSamples.get(streamId);
+  if (!samples || samples.length < ADAPTIVE_SLOW_SAMPLES_NEEDED) return false;
+  const recentSamples = samples.slice(-ADAPTIVE_SLOW_SAMPLES_NEEDED);
+  return recentSamples.every(s => s.speed < ADAPTIVE_SPEED_THRESHOLD);
+}
+
+async function adaptiveDowngrade(streamId, baseUrl) {
+  if (adaptiveDowngrading.has(streamId) || manuallyStoppingStreams.has(streamId)) return;
+  const streamData = activeStreams.get(streamId);
+  if (!streamData || streamData.isCopyMode) return;
+
+  const currentTier = streamQualityTier.get(streamId) || 0;
+  const nextTier = currentTier + 1;
+  if (nextTier >= QUALITY_TIERS.length) {
+    addStreamLog(streamId, '[Adaptive] Already at lowest quality. Cannot downgrade further.');
+    return;
+  }
+
+  const tierInfo = QUALITY_TIERS[nextTier];
+  addStreamLog(streamId, `[Adaptive] Speed too slow! Downgrading: ${QUALITY_TIERS[currentTier].label} -> ${tierInfo.label}`);
+  console.log(`[StreamingService] Adaptive Downgrade stream ${streamId}: tier ${currentTier} -> ${nextTier} (${tierInfo.label})`);
+
+  adaptiveDowngrading.add(streamId);
+  streamQualityTier.set(streamId, nextTier);
+  streamSpeedSamples.delete(streamId);
+
+  try {
+    const result = await startStream(streamId, true, baseUrl);
+    if (!result.success) addStreamLog(streamId, `[Adaptive] Downgrade restart failed: ${result.error}`);
+  } catch (e) {
+    addStreamLog(streamId, `[Adaptive] Downgrade error: ${e.message}`);
+  } finally {
+    adaptiveDowngrading.delete(streamId);
+  }
 }
 
 function buildMediaLabel(media, index, type) {
@@ -501,6 +571,14 @@ async function checkSingleVideoCopyCompatible(videoPath) {
 }
 
 function getAdaptiveSettings(stream, activeCount) {
+  // Check if adaptive quality system has downgraded this stream
+  const tier = streamQualityTier.get(stream.id);
+  if (tier !== undefined && tier > 0 && tier < QUALITY_TIERS.length) {
+    const t = QUALITY_TIERS[tier];
+    console.log(`[StreamingService] Adaptive Tier ${tier}: ${t.label}`);
+    return { finalBitrate: t.bitrate, finalResolution: t.resolution, preset: t.preset, fps: t.fps };
+  }
+
   const resolution = stream.resolution || '1280x720';
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
@@ -1273,8 +1351,15 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       startTime: startTimeIso,
       endTime: originalEndTime,
       pid: ffmpegProcess.pid,
-      lastActivity: Date.now()
+      lastActivity: Date.now(),
+      isCopyMode: ffmpegArgs.includes('-c:v') && ffmpegArgs[ffmpegArgs.indexOf('-c:v') + 1] === 'copy',
+      streamId
     });
+
+    if (!activeStreams.get(streamId).isCopyMode && !streamQualityTier.has(streamId)) {
+      streamQualityTier.set(streamId, 0);
+    }
+    addStreamLog(streamId, `Mode: ${activeStreams.get(streamId).isCopyMode ? 'Copy (low CPU)' : 'Transcode (tier ' + (streamQualityTier.get(streamId) || 0) + ')'}`);
 
     ffmpegProcess.stdout.on('data', (data) => {
       const msg = data.toString().trim();
@@ -1297,6 +1382,15 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
         if (isProgressLogLine(line)) {
           if (startupState.resolve) {
             startupState.resolve();
+          }
+
+          // Adaptive Quality: monitor encoding speed in real-time
+          const speed = parseSpeedFromLine(line);
+          if (speed !== null) {
+            trackStreamSpeed(streamId, speed);
+            if (shouldDowngradeQuality(streamId)) {
+              adaptiveDowngrade(streamId, baseUrl);
+            }
           }
           continue;
         }
