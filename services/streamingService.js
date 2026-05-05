@@ -814,8 +814,35 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     }
 
     // Adaptive Quality for Playlist (no custom audio, advanced settings on)
+    // First check if copy mode is possible to avoid unnecessary transcoding
+    const canCopyNoAudio = await checkPlaylistCopyCompatible(videoPaths);
     const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+
+    if (canCopyNoAudio) {
+      // COPY MODE: Video already H.264/yuv420p — skip transcode
+      console.log(`[StreamingService] Copy Mode: Playlist no-audio (advanced forced). Video copy.`);
+      return [
+        '-nostdin',
+        '-loglevel', 'warning',
+        '-stats',
+        '-re',
+        '-fflags', '+genpts+igndts+discardcorrupt',
+        '-avoid_negative_ts', 'make_zero',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatFile,
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-bsf:a', 'aac_adtstoasc',
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ];
+    }
+
+    // TRANSCODE: Video not compatible, use adaptive quality
     const adaptive = getAdaptiveSettings(stream, activeCount);
+    console.log(`[StreamingService] Transcode: Playlist no-audio. ${adaptive.finalResolution} @ ${adaptive.finalBitrate}k preset=${adaptive.preset}`);
 
     return [
       '-nostdin',
