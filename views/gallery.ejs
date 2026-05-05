@@ -157,7 +157,7 @@ function formatDuration(seconds) {
       <% videos.forEach(function(video) { 
         const filepath = (video.filepath || '').toLowerCase();
         const isAudio = filepath.includes('/audio/') || filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3');
-        const isImage = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp');
+        const isImage = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp') || filepath.endsWith('.gif');
         const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
       %>
       <div class="gallery-grid-item file-item group bg-dark-700 rounded-lg overflow-hidden border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all cursor-pointer"
@@ -271,7 +271,7 @@ function formatDuration(seconds) {
             <% videos.forEach(function(video) { 
               const filepath = (video.filepath || '').toLowerCase();
               const isAudio = filepath.includes('/audio/') || filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3');
-              const isImage = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp');
+              const isImage = filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp') || filepath.endsWith('.gif');
               const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
             %>
             <tr class="gallery-list-item file-item-row group hover:bg-dark-700 transition-colors cursor-pointer"
@@ -375,14 +375,14 @@ function formatDuration(seconds) {
                 <i id="dropzoneIcon" class="ti ti-cloud-upload text-2xl text-gray-400"></i>
               </div>
               <div>
-                <p id="dropzoneText" class="text-gray-300">Drag and drop video or image files here</p>
+                <p id="dropzoneText" class="text-gray-300">Drag and drop video files here</p>
                 <p class="text-gray-500 text-sm">Or click to browse</p>
               </div>
               <label class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors inline-block cursor-pointer">
                 <span>Select files</span>
-                <input type="file" name="media" accept="video/mp4,video/avi,video/quicktime,image/jpeg,image/png,image/webp" multiple class="hidden" id="mediaFileInput">
+                <input type="file" name="media" accept="video/mp4,video/avi,video/quicktime" multiple class="hidden" id="mediaFileInput">
               </label>
-              <p id="dropzoneFormats" class="text-gray-500 text-xs">Supported formats: MP4, AVI, MOV, JPG, PNG, WEBP (max 50GB)</p>
+              <p id="dropzoneFormats" class="text-gray-500 text-xs">Supported formats: MP4, AVI, MOV (max 50GB)</p>
             </div>
           </div>
           <div id="selectedFileInfo" class="hidden">
@@ -561,8 +561,8 @@ function switchUploadTab(type) {
     tabImage.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
     dropzoneIcon.className = 'ti ti-photo text-2xl text-gray-400';
     dropzoneText.textContent = 'Drag and drop image files here';
-    dropzoneFormats.textContent = 'Supported formats: JPG, JPEG, PNG, WEBP';
-    mediaFileInput.accept = 'image/jpeg,image/png,image/webp';
+    dropzoneFormats.textContent = 'Supported formats: JPG, JPEG, PNG, WEBP, GIF';
+    mediaFileInput.accept = 'image/jpeg,image/png,image/webp,image/gif';
   } else {
     tabAudio.className = 'flex-1 py-2 px-4 rounded-lg bg-primary text-white transition-colors';
     dropzoneIcon.className = 'ti ti-music text-2xl text-gray-400';
@@ -1195,11 +1195,35 @@ function isAudioFile(file) {
   return audioTypes.includes(file.type) || audioExts.includes(ext);
 }
 
+function isImageFile(file) {
+  const imageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+  const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  return imageTypes.includes(file.type) || imageExts.includes(ext);
+}
+
 function isVideoFile(file) {
   const videoTypes = ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-msvideo'];
   const videoExts = ['.mp4', '.avi', '.mov'];
   const ext = '.' + file.name.split('.').pop().toLowerCase();
   return videoTypes.includes(file.type) || videoExts.includes(ext);
+}
+
+function getUploadFileType(file) {
+  if (isAudioFile(file)) return 'audio';
+  if (isImageFile(file)) return 'image';
+  if (isVideoFile(file)) return 'video';
+  return 'unknown';
+}
+
+function isAcceptedUploadFile(file, uploadType = currentUploadType) {
+  return getUploadFileType(file) === uploadType;
+}
+
+function getUploadTypeLabel(uploadType = currentUploadType) {
+  if (uploadType === 'image') return 'image file (JPG, PNG, WEBP, GIF)';
+  if (uploadType === 'audio') return 'audio file (MP3, WAV, AAC, M4A, OGG, FLAC)';
+  return 'video file (MP4, AVI, MOV)';
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1222,14 +1246,21 @@ document.addEventListener('DOMContentLoaded', function() {
     mediaFileInput.addEventListener('change', function() {
       const newFiles = Array.from(this.files);
       if (newFiles.length > 0) {
+        const validFiles = newFiles.filter(f => isAcceptedUploadFile(f));
+        const invalidFiles = newFiles.filter(f => !isAcceptedUploadFile(f));
+        if (invalidFiles.length > 0) {
+          showToast('error', `Please upload a valid ${getUploadTypeLabel()}`);
+          this.value = '';
+          return;
+        }
         const maxSize = 50 * 1024 * 1024 * 1024;
-        const large = newFiles.filter(f => f.size > maxSize);
+        const large = validFiles.filter(f => f.size > maxSize);
         if (large.length > 0) {
           showToast('error', `File too large: ${large.map(f => f.name).join(', ')}`);
           this.value = '';
           return;
         }
-        const totalNewSize = newFiles.reduce((sum, f) => sum + f.size, 0);
+        const totalNewSize = validFiles.reduce((sum, f) => sum + f.size, 0);
         const totalSelectedSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
         if (userDiskLimit > 0 && (userDiskUsage + totalSelectedSize + totalNewSize) > userDiskLimit) {
           const remaining = getRemainingSpace() - totalSelectedSize;
@@ -1237,7 +1268,7 @@ document.addEventListener('DOMContentLoaded', function() {
           this.value = '';
           return;
         }
-        newFiles.forEach(f => {
+        validFiles.forEach(f => {
           if (!selectedFiles.some(e => e.name === f.name && e.size === f.size)) selectedFiles.push(f);
         });
         updateFilesList();
@@ -1254,8 +1285,8 @@ document.addEventListener('DOMContentLoaded', function() {
     selectedFileCount.textContent = `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected (${formatFileSize(totalSize)})`;
     selectedFilesList.innerHTML = '';
     selectedFiles.forEach((file, i) => {
-      const isAudio = isAudioFile(file);
-      const icon = isAudio ? 'ti-music' : 'ti-video';
+      const mediaType = getUploadFileType(file);
+      const icon = mediaType === 'audio' ? 'ti-music' : (mediaType === 'image' ? 'ti-photo' : 'ti-video');
       const div = document.createElement('div');
       div.className = 'flex items-center justify-between p-2 rounded-lg hover:bg-dark-600 transition-colors';
       div.innerHTML = `
@@ -1294,8 +1325,8 @@ document.addEventListener('DOMContentLoaded', function() {
       let success = 0, failed = [];
       uploadFilesList.innerHTML = '';
       selectedFiles.forEach((f) => {
-        const isAudio = isAudioFile(f);
-        const icon = isAudio ? 'ti-music' : 'ti-video';
+        const mediaType = getUploadFileType(f);
+        const icon = mediaType === 'audio' ? 'ti-music' : (mediaType === 'image' ? 'ti-photo' : 'ti-video');
         const div = document.createElement('div');
         div.className = 'flex items-center justify-between p-2 rounded-lg';
         div.innerHTML = `
@@ -1313,6 +1344,7 @@ document.addEventListener('DOMContentLoaded', function() {
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
         const isAudio = isAudioFile(file);
+        const isImage = isImageFile(file);
         uploadProgressStatus.textContent = `Uploading ${i + 1}/${selectedFiles.length}: ${file.name}`;
         updateFileProgress(i, 'uploading', 0);
         
@@ -1320,7 +1352,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (isAudio) {
           result = await uploadAudioSimple(file, i, selectedFiles.length);
         } else {
-          const useChunked = file.size > 50 * 1024 * 1024;
+          const useChunked = !isImage && file.size > 50 * 1024 * 1024;
           result = useChunked ? await uploadChunked(file, i, selectedFiles.length) : await uploadSimple(file, i, selectedFiles.length);
         }
         
@@ -1469,8 +1501,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const files = e.dataTransfer.files;
       if (files.length > 0) {
         const validFiles = Array.from(files).filter(f => {
-          if (currentUploadType === 'video') return isVideoFile(f);
-          return isAudioFile(f);
+          return isAcceptedUploadFile(f);
         });
         if (validFiles.length > 0) {
           const totalNewSize = validFiles.reduce((sum, f) => sum + f.size, 0);
@@ -1486,8 +1517,7 @@ document.addEventListener('DOMContentLoaded', function() {
           selectedFileInfo.classList.remove('hidden');
           uploadButton.disabled = false;
         } else {
-          if (currentUploadType === 'video') showToast('error', 'Please upload a valid video file (MP4, AVI, MOV)');
-          else showToast('error', 'Please upload a valid audio file (MP3, WAV, AAC, M4A, OGG, FLAC)');
+          showToast('error', `Please upload a valid ${getUploadTypeLabel()}`);
         }
       }
     });
@@ -1505,6 +1535,11 @@ document.addEventListener('DOMContentLoaded', function() {
   function isAudioMediaItem(video) {
     const filepath = (video.filepath || '').toLowerCase();
     return filepath.includes('/audio/') || filepath.endsWith('.m4a') || filepath.endsWith('.aac') || filepath.endsWith('.mp3');
+  }
+
+  function isImageMediaItem(video) {
+    const filepath = (video.filepath || '').toLowerCase();
+    return filepath.endsWith('.jpg') || filepath.endsWith('.jpeg') || filepath.endsWith('.png') || filepath.endsWith('.webp') || filepath.endsWith('.gif');
   }
 
   function formatGalleryDate(value) {
@@ -1539,8 +1574,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function buildVideoGridMarkup(video) {
     const isAudio = isAudioMediaItem(video);
-    const mediaType = isAudio ? 'audio' : 'video';
-    const thumbnail = escapeHtml(video.thumbnail_path || '/images/default-video-thumbnail.svg');
+    const isImage = isImageMediaItem(video);
+    const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
+    const thumbnail = escapeHtml(isImage ? (video.filepath || video.thumbnail_path || '/images/default-video-thumbnail.svg') : (video.thumbnail_path || '/images/default-video-thumbnail.svg'));
     const title = escapeHtml(video.title || '');
     return `
       <div class="gallery-grid-item file-item gallery-playable group bg-dark-700 rounded-lg overflow-hidden border border-transparent hover:border-gray-600 hover:bg-dark-600 transition-all cursor-pointer"
@@ -1553,13 +1589,18 @@ document.addEventListener('DOMContentLoaded', function() {
               <i class="ti ti-music text-3xl text-primary"></i>
             </div>
           </div>` : `<img src="${thumbnail}" alt="${title}" class="w-full h-full object-cover">`}
+          ${isImage ? `
+          <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <i class="ti ti-photo text-3xl text-white"></i>
+          </div>` : `
           <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <div class="bg-primary/90 w-10 h-10 rounded-full flex items-center justify-center">
               <i class="ti ti-player-play-filled text-white"></i>
             </div>
           </div>
-          <span class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">${formatDuration(video.duration)}</span>
+          <span class="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">${formatDuration(video.duration)}</span>`}
           ${isAudio ? `<span class="absolute top-2 left-2 bg-primary/80 text-white text-xs px-1.5 py-0.5 rounded"><i class="ti ti-music text-xs mr-1"></i>Audio</span>` : ''}
+          ${isImage ? `<span class="absolute top-2 left-2 bg-blue-500/80 text-white text-xs px-1.5 py-0.5 rounded"><i class="ti ti-photo text-xs mr-1"></i>Image</span>` : ''}
         </div>
         <div class="p-3">
           <h3 class="font-medium text-sm truncate mb-1">${title}</h3>
@@ -1612,7 +1653,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function buildVideoListMarkup(video) {
     const isAudio = isAudioMediaItem(video);
-    const mediaType = isAudio ? 'audio' : 'video';
+    const isImage = isImageMediaItem(video);
+    const mediaType = isAudio ? 'audio' : (isImage ? 'image' : 'video');
     const title = escapeHtml(video.title || '');
     const thumbnail = escapeHtml(video.thumbnail_path || '/images/default-video-thumbnail.svg');
     return `
@@ -1622,14 +1664,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <td class="px-4 py-3">
           <div class="flex items-center gap-3">
             <div class="w-12 h-8 rounded overflow-hidden bg-[#181818] flex-shrink-0 relative flex items-center justify-center">
-              ${isAudio ? `<i class="ti ti-music text-primary"></i>` : `<img src="${thumbnail}" alt="" class="w-full h-full object-cover">`}
+              ${isAudio ? `<i class="ti ti-music text-primary"></i>` : (isImage ? `<i class="ti ti-photo text-blue-400"></i>` : `<img src="${thumbnail}" alt="" class="w-full h-full object-cover">`)}
             </div>
             <div class="flex items-center gap-2">
               <span class="font-medium text-sm truncate max-w-xs">${title}</span>
             </div>
           </div>
         </td>
-        <td class="px-4 py-3 text-sm text-gray-400">${formatDuration(video.duration)}</td>
+        <td class="px-4 py-3 text-sm text-gray-400">${isImage ? '--' : formatDuration(video.duration)}</td>
         <td class="px-4 py-3 text-sm text-gray-400">${formatFileSize(video.file_size || 0)}</td>
         <td class="px-4 py-3 text-sm text-gray-400">${formatGalleryDate(video.upload_date || video.created_at)}</td>
         <td class="px-4 py-3 text-right">

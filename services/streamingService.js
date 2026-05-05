@@ -1,13 +1,16 @@
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
 const { v4: uuidv4 } = require('uuid');
+const { promisify } = require('util');
 const { db } = require('../db/database');
 const Stream = require('../models/Stream');
 const Playlist = require('../models/Playlist');
 const Video = require('../models/Video');
+
+const execFilePromise = promisify(execFile);
 
 let ffmpegPath;
 if (fs.existsSync('/usr/bin/ffmpeg')) {
@@ -35,7 +38,73 @@ function shuffleArray(array) {
 function isImageFile(filepath) {
   if (!filepath) return false;
   const ext = path.extname(filepath).toLowerCase();
-  return ['.jpg', '.jpeg', '.png', '.webp', '.bmp'].includes(ext);
+  return ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getSlideshowFps(stream) {
+  const configuredFps = parsePositiveInt(stream.fps, 30);
+  const maxFps = parsePositiveInt(process.env.SLIDESHOW_MAX_FPS, 15);
+  return Math.max(10, Math.min(configuredFps, maxFps));
+}
+
+function getSlideshowBitrate(stream) {
+  const configuredBitrate = parsePositiveInt(stream.bitrate, 1800);
+  const maxBitrate = parsePositiveInt(process.env.SLIDESHOW_MAX_BITRATE, 1800);
+  return Math.max(800, Math.min(configuredBitrate, maxBitrate));
+}
+
+async function runFfmpeg(args) {
+  await execFilePromise(ffmpegPath, args, {
+    windowsHide: true,
+    maxBuffer: 1024 * 1024 * 8
+  });
+}
+
+async function renderStaticSlideshowVideo({ streamId, videoPaths, tempDir, resolution, fps, bitrate, imageDuration }) {
+  const renderConcatFile = path.join(tempDir, `slideshow_render_${streamId}.txt`);
+  const outputPath = path.join(tempDir, `slideshow_render_${streamId}_${resolution}_${fps}_${bitrate}.mp4`);
+  let content = '';
+
+  for (const imagePath of videoPaths) {
+    content += `file '${imagePath.replace(/\\/g, '/')}'\n`;
+    content += `duration ${imageDuration}\n`;
+  }
+  if (videoPaths.length > 0) {
+    content += `file '${videoPaths[videoPaths.length - 1].replace(/\\/g, '/')}'\n`;
+  }
+
+  fs.writeFileSync(renderConcatFile, content);
+
+  await runFfmpeg([
+    '-y',
+    '-hide_banner',
+    '-loglevel', 'warning',
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', renderConcatFile,
+    '-an',
+    '-vf', `fps=${fps}`,
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-tune', 'stillimage',
+    '-profile:v', 'main',
+    '-pix_fmt', 'yuv420p',
+    '-b:v', `${bitrate}k`,
+    '-maxrate', `${bitrate}k`,
+    '-bufsize', `${bitrate * 2}k`,
+    '-r', String(fps),
+    '-g', String(fps * 2),
+    '-keyint_min', String(fps),
+    '-movflags', '+faststart',
+    outputPath
+  ]);
+
+  return outputPath;
 }
 
 const activeStreams = new Map();
@@ -452,8 +521,10 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   }
 
   const resolution = stream.resolution || '1280x720';
-  const bitrate = stream.bitrate || 2500;
-  const fps = stream.fps || 30;
+  const normalBitrate = stream.bitrate || 2500;
+  const normalFps = stream.fps || 30;
+  const bitrate = isSlideshow ? getSlideshowBitrate(stream) : normalBitrate;
+  const fps = isSlideshow ? getSlideshowFps(stream) : normalFps;
   const transitionType = playlist.transition_type || 'none';
   const transitionDuration = parseFloat(playlist.transition_duration) || 1.0;
   const imageDuration = 10; // Total duration per image
@@ -462,10 +533,6 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   const videos = playlist.is_shuffle ? shuffleArray(playlist.videos) : playlist.videos;
 
   if (isSlideshow) {
-    const util = require('util');
-    const { exec } = require('child_process');
-    const execPromise = util.promisify(exec);
-    
     for (let i = 0; i < videos.length; i++) {
       const video = videos[i];
       const relPath = video.filepath.startsWith('/') ? video.filepath.substring(1) : video.filepath;
@@ -477,9 +544,19 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       // Standardize image based on transition mode
       // All modes now use normalized .jpg images to minimize CPU load and startup time
       const normPath = path.join(tempDir, `norm_${stream.id}_${i}.jpg`);
-      const cmd = `"${ffmpegPath}" -y -i "${fullPath}" -vf "scale=${resolution}:force_original_aspect_ratio=increase,crop=${resolution.replace('x', ':')}" -c:v mjpeg -q:v 2 -pix_fmt yuvj420p "${normPath}"`;
       try {
-        await execPromise(cmd);
+        await runFfmpeg([
+          '-y',
+          '-hide_banner',
+          '-loglevel', 'warning',
+          '-i', fullPath,
+          '-vf', `scale=${resolution}:force_original_aspect_ratio=increase,crop=${resolution.replace('x', ':')}`,
+          '-frames:v', '1',
+          '-c:v', 'mjpeg',
+          '-q:v', '3',
+          '-pix_fmt', 'yuvj420p',
+          normPath
+        ]);
         videoPaths.push(normPath);
       } catch (e) {
         console.error(`Failed to normalize image to JPG ${fullPath}:`, e);
@@ -553,41 +630,31 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       audioInputArgs = ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
     }
 
-    // Since images are already normalized and scaled, we don't need scale/crop here.
-    // We only need fps filter to ensure RTMP gets constant frame rate and realtime filter for pacing.
+    // For static slides without transitions, render once and stream-copy the video.
+    // This keeps the live FFmpeg process light on small VPS instances.
     if (transitionType === 'none' || videoPaths.length <= 1) {
-      const filterGraph = hasAudio
-        ? `[0:v]fps=${fps},realtime[bg];[1:a]showwaves=s=${resolution.split('x')[0]}x200:mode=line:colors=cyan|purple:rate=25[spec];[bg][spec]overlay=0:H-h:format=auto[v]`
-        : `[0:v]fps=${fps},realtime[v]`;
+      const renderedSlideshowPath = await renderStaticSlideshowVideo({
+        streamId: stream.id,
+        videoPaths,
+        tempDir,
+        resolution,
+        fps,
+        bitrate,
+        imageDuration
+      });
+      const loopArgs = stream.loop_video ? ['-stream_loop', '-1'] : [];
 
       return [
         '-nostdin',
         '-loglevel', 'warning',
         '-stats',
         '-re',
-        '-fflags', '+genpts+igndts+discardcorrupt',
-        '-avoid_negative_ts', 'make_zero',
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', concatFile,
+        ...loopArgs,
+        '-i', renderedSlideshowPath,
         ...audioInputArgs,
-        '-filter_complex', 
-        filterGraph,
-        '-map', '[v]',
+        '-map', '0:v:0',
         '-map', '1:a:0',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-tune', 'zerolatency',
-        '-profile:v', 'main',
-        '-pix_fmt', 'yuv420p',
-        '-b:v', `${bitrate}k`,
-        '-maxrate', `${bitrate}k`,
-        '-bufsize', `${bitrate * 2}k`,
-        '-s', resolution,
-        '-r', fps,
-        '-g', fps * 2,
-        '-keyint_min', fps,
-        '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+        '-c:v', 'copy',
         '-c:a', 'aac',
         '-b:a', '128k',
         '-ar', '44100',
@@ -641,11 +708,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     // We will keep loop for now but they should be warned if they use it.
     filter += `[${lastLabel}]loop=loop=-1:size=${Math.floor(loopDuration * fps)}:start=0,realtime[loopv];`;
     
-    if (hasAudio) {
-      filter += `[${circularPaths.length}:a]showwaves=s=${resolution.split('x')[0]}x200:mode=line:colors=cyan|purple:rate=25[spec];[loopv][spec]overlay=0:H-h:format=auto[v]`;
-    } else {
-      filter += `[loopv]copy[v]`; // Just pass through if no audio spectrum is needed
-    }
+    filter += `[loopv]copy[v]`;
 
     args.push('-filter_complex', filter);
     args.push('-map', '[v]');
@@ -874,8 +937,8 @@ async function buildFFmpegArgs(stream) {
     if (isImg) {
       // Force transcode for single image even if advanced settings are off
       const resolution = stream.resolution || '1280x720';
-      const bitrate = stream.bitrate || 2500;
-      const fps = stream.fps || 30;
+      const bitrate = getSlideshowBitrate(stream);
+      const fps = getSlideshowFps(stream);
       
       return [
         '-nostdin',
@@ -886,7 +949,7 @@ async function buildFFmpegArgs(stream) {
         '-i', videoPath,
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
-        '-tune', 'zerolatency',
+        '-tune', 'stillimage',
         '-pix_fmt', 'yuv420p',
         '-b:v', `${bitrate}k`,
         '-maxrate', `${bitrate}k`,
@@ -923,8 +986,8 @@ async function buildFFmpegArgs(stream) {
   }
 
   const resolution = stream.resolution || '1280x720';
-  const bitrate = stream.bitrate || 2500;
-  const fps = stream.fps || 30;
+  const bitrate = isImg ? getSlideshowBitrate(stream) : stream.bitrate || 2500;
+  const fps = isImg ? getSlideshowFps(stream) : stream.fps || 30;
 
   // Optimized Adaptive Logic for 1 Core VPS
   // Focuses on maintaining "Excellent" health status with minimal CPU overhead
