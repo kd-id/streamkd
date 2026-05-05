@@ -458,6 +458,7 @@ const currentFolderId = <%- JSON.stringify(currentFolderId || '') %>;
 let galleryVideosState = <%- JSON.stringify(videos || []) %>;
 let galleryFoldersState = <%- JSON.stringify(folders || []) %>;
 let galleryCurrentFolderState = <%- JSON.stringify(currentFolder || null) %>;
+const activeOptimizationPolls = new Set();
 
 async function loadDiskUsage() {
   try {
@@ -865,13 +866,55 @@ async function optimizeVideo(videoId, videoTitle) {
       });
       const data = await response.json();
       if (data.success) {
-        showToast('success', 'Video is being optimized. It will appear in your gallery soon!');
+        showToast('success', 'Video is being optimized. Gallery will update automatically.');
+        if (data.jobId) {
+          pollOptimizationStatus(data.jobId, videoTitle);
+        } else {
+          setTimeout(() => window.refreshGalleryData?.(), 5000);
+        }
       } else {
         showToast('error', data.error || 'Failed to start optimization');
       }
     } catch (error) {
       showToast('error', 'An error occurred while starting optimization');
     }
+  }
+}
+
+async function pollOptimizationStatus(jobId, videoTitle) {
+  if (activeOptimizationPolls.has(jobId)) return;
+  activeOptimizationPolls.add(jobId);
+
+  const maxAttempts = 180;
+  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  try {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await wait(attempt === 0 ? 3000 : 5000);
+      const response = await fetch(`/api/videos/optimize/${encodeURIComponent(jobId)}/status`);
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to check optimization status');
+      }
+
+      if (data.status === 'completed') {
+        await window.refreshGalleryData?.();
+        showToast('success', `Optimization complete: ${data.title || videoTitle}`);
+        return;
+      }
+
+      if (data.status === 'failed') {
+        showToast('error', data.error || 'Optimization failed');
+        return;
+      }
+    }
+
+    showToast('warning', 'Optimization is still running. Refresh gallery later if needed.');
+  } catch (error) {
+    console.error('Optimization polling error:', error);
+  } finally {
+    activeOptimizationPolls.delete(jobId);
   }
 }
 
@@ -1607,6 +1650,10 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="flex items-center justify-between">
             <span class="text-xs text-gray-400">${formatFileSize(video.file_size || 0)}</span>
             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              ${mediaType === 'video' ? `
+              <button class="file-optimize-btn text-gray-400 hover:text-blue-400 p-1" title="Turbo Optimize for Streaming" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
+                <i class="ti ti-rocket text-sm"></i>
+              </button>` : ''}
               <button class="file-rename-btn text-gray-400 hover:text-white p-1" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
                 <i class="ti ti-pencil text-sm"></i>
               </button>
@@ -1676,6 +1723,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <td class="px-4 py-3 text-sm text-gray-400">${formatGalleryDate(video.upload_date || video.created_at)}</td>
         <td class="px-4 py-3 text-right">
           <div class="flex items-center justify-end gap-1">
+            ${mediaType === 'video' ? `
+            <button class="file-optimize-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-blue-400 transition-colors" title="Turbo Optimize for Streaming" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
+              <i class="ti ti-rocket text-sm"></i>
+            </button>` : ''}
             <button class="file-rename-btn p-1.5 hover:bg-dark-600 rounded text-gray-400 hover:text-white transition-colors" data-video-id="${escapeHtml(video.id)}" data-video-title="${title}">
               <i class="ti ti-pencil text-sm"></i>
             </button>
@@ -1710,6 +1761,14 @@ document.addEventListener('DOMContentLoaded', function() {
         event.preventDefault();
         event.stopPropagation();
         showDeleteDialog(button.dataset.videoId, button.dataset.videoTitle);
+      };
+    });
+
+    document.querySelectorAll('.file-optimize-btn').forEach(button => {
+      button.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        optimizeVideo(button.dataset.videoId, button.dataset.videoTitle);
       };
     });
 

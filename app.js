@@ -55,6 +55,17 @@ const app = express();
 app.set("trust proxy", 1);
 const port = process.env.PORT || 7575;
 const tokens = new csrf();
+const optimizationJobs = new Map();
+const OPTIMIZATION_JOB_TTL = 24 * 60 * 60 * 1000;
+
+function cleanupOptimizationJobs() {
+  const now = Date.now();
+  for (const [jobId, job] of optimizationJobs.entries()) {
+    if (now - job.updatedAt > OPTIMIZATION_JOB_TTL) {
+      optimizationJobs.delete(jobId);
+    }
+  }
+}
 
 ensureDirectories();
 app.locals.helpers = {
@@ -2300,23 +2311,42 @@ app.post('/api/videos/:id/rename', isAuthenticated, [
 
 app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
   try {
+    cleanupOptimizationJobs();
+
     const video = await Video.findById(req.params.id);
     if (!video) return res.status(404).json({ error: 'Video not found' });
     if (video.user_id !== req.session.userId) return res.status(403).json({ error: 'Unauthorized' });
+    if (isImageFile(video.filepath) || (video.filepath || '').includes('/audio/')) {
+      return res.status(400).json({ error: 'Only video files can be optimized' });
+    }
 
     const videoProcessor = require('./utils/videoProcessor');
     const inputPath = path.join(__dirname, 'public', video.filepath);
     const outputFilename = `optimized_${Date.now()}_${path.basename(video.filepath)}`;
     const outputRelPath = path.join(path.dirname(video.filepath), outputFilename).replace(/\\/g, '/');
     const outputPath = path.join(__dirname, 'public', outputRelPath);
+    const jobId = uuidv4();
+
+    optimizationJobs.set(jobId, {
+      id: jobId,
+      userId: video.user_id,
+      sourceVideoId: video.id,
+      sourceTitle: video.title,
+      status: 'processing',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      resultVideoId: null,
+      resultTitle: null,
+      error: null
+    });
 
     // Run in background
-    res.json({ success: true, message: 'Optimization started' });
+    res.json({ success: true, message: 'Optimization started', jobId });
 
     videoProcessor.optimizeVideo(inputPath, outputPath)
       .then(async () => {
         const stats = fs.statSync(outputPath);
-        await Video.create({
+        const optimizedVideo = await Video.create({
           user_id: video.user_id,
           title: `[Optimized] ${video.title}`,
           filepath: outputRelPath,
@@ -2329,9 +2359,24 @@ app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
           bitrate: 2500,
           fps: 30
         });
+        const existingJob = optimizationJobs.get(jobId) || {};
+        optimizationJobs.set(jobId, {
+          ...existingJob,
+          status: 'completed',
+          updatedAt: Date.now(),
+          resultVideoId: optimizedVideo.id,
+          resultTitle: optimizedVideo.title
+        });
         console.log(`[Optimization] Success: ${video.title}`);
       })
       .catch(err => {
+        const existingJob = optimizationJobs.get(jobId) || {};
+        optimizationJobs.set(jobId, {
+          ...existingJob,
+          status: 'failed',
+          updatedAt: Date.now(),
+          error: err.message || 'Optimization failed'
+        });
         console.error(`[Optimization] Failed: ${video.title}`, err);
       });
 
@@ -2339,6 +2384,26 @@ app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
     console.error('Error starting optimization:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+app.get('/api/videos/optimize/:jobId/status', isAuthenticated, (req, res) => {
+  cleanupOptimizationJobs();
+
+  const job = optimizationJobs.get(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ success: false, error: 'Optimization job not found' });
+  }
+  if (job.userId !== req.session.userId) {
+    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  }
+
+  res.json({
+    success: true,
+    status: job.status,
+    videoId: job.resultVideoId,
+    title: job.resultTitle,
+    error: job.error
+  });
 });
 app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
   try {
