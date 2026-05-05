@@ -16,9 +16,7 @@ function run(args, extraEnv = {}) {
     ? spawnSync(`${npm} ${args.join(' ')}`, { ...options, shell: true })
     : spawnSync(npm, args, options);
 
-  if (result.status !== 0) {
-    process.exit(result.status || 1);
-  }
+  return result.status || 0;
 }
 
 if (/^(1|true|yes)$/i.test(process.env.SKIP_NATIVE_REBUILD || '')) {
@@ -27,9 +25,23 @@ if (/^(1|true|yes)$/i.test(process.env.SKIP_NATIVE_REBUILD || '')) {
 }
 
 if (/^(1|true|yes)$/i.test(process.env.FORCE_NATIVE_BUILD_FROM_SOURCE || '')) {
-  run(['rebuild', ...nativePackages], {
+  const status = run(['rebuild', ...nativePackages], {
     npm_config_build_from_source: 'true'
   });
-} else {
-  run(['rebuild', ...nativePackages]);
+  process.exit(status);
 }
+
+const fastStatus = run(['rebuild', ...nativePackages]);
+if (fastStatus === 0) {
+  process.exit(0);
+}
+
+if (process.platform !== 'linux') {
+  process.exit(fastStatus);
+}
+
+console.warn('Fast native rebuild failed. Falling back to build_from_source for VPS compatibility.');
+const sourceStatus = run(['rebuild', ...nativePackages], {
+  npm_config_build_from_source: 'true'
+});
+process.exit(sourceStatus);

@@ -4,6 +4,8 @@ set -euo pipefail
 BRANCH="${STREAMKD_UPDATE_BRANCH:-main}"
 REMOTE="${STREAMKD_UPDATE_REMOTE:-origin}"
 APP_NAME="${STREAMKD_PM2_NAME:-streamkd}"
+HEALTH_URL="${STREAMKD_HEALTH_URL:-http://127.0.0.1:${PORT:-7575}/login}"
+RESTARTED_WITH=""
 
 cd "$(dirname "$0")/.."
 
@@ -45,12 +47,30 @@ if command -v pm2 >/dev/null 2>&1 && pm2 describe "$APP_NAME" >/dev/null 2>&1; t
   echo "Restarting PM2 app: $APP_NAME"
   pm2 restart "$APP_NAME" --update-env
   pm2 save
+  RESTARTED_WITH="pm2"
 elif command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "^${APP_NAME}.service"; then
   echo "Restarting systemd service: $APP_NAME"
   sudo systemctl restart "$APP_NAME"
+  RESTARTED_WITH="systemd"
 else
   echo "No PM2/systemd app named '$APP_NAME' found."
   echo "Restart manually, for example: pm2 restart $APP_NAME --update-env"
+fi
+
+if [ -n "$RESTARTED_WITH" ]; then
+  echo "Checking local app health: $HEALTH_URL"
+  sleep 5
+  if ! curl -fsS "$HEALTH_URL" >/dev/null; then
+    echo "App did not respond after restart. Cloudflare will show 502 until this is fixed."
+    if [ "$RESTARTED_WITH" = "pm2" ]; then
+      echo "Recent PM2 logs:"
+      pm2 logs "$APP_NAME" --lines 100 --nostream || true
+    else
+      echo "Recent systemd logs:"
+      sudo journalctl -u "$APP_NAME" -n 100 --no-pager || true
+    fi
+    exit 1
+  fi
 fi
 
 echo "Done."
