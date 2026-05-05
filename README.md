@@ -99,7 +99,8 @@ cd streamkd
 
 Install Paket Node.JS:
 ```bash
-npm install
+npm install --ignore-scripts
+npm run rebuild-native
 ```
 
 Generate Secret Key:
@@ -120,6 +121,14 @@ Redirect URI yang harus ditambahkan di Google Cloud Console:
 ```text
 https://domain-anda.com/auth/youtube/callback
 ```
+
+Update cepat di VPS:
+```bash
+cd /home/www/streamkd
+bash scripts/update-vps.sh
+```
+
+Script update cepat hanya menjalankan `npm install` dan rebuild native module jika `package.json` atau `package-lock.json` berubah. Untuk perubahan source biasa, script cukup `git pull` lalu restart aplikasi.
 
 Jalankan aplikasi:
 ```bash

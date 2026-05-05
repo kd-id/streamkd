@@ -8,6 +8,7 @@
     "dev": "nodemon app.js",
     "generate-secret": "node generate-secret.js",
     "rebuild-native": "node scripts/rebuild-native.js",
+    "update:vps": "bash scripts/update-vps.sh",
     "postinstall": "npm run rebuild-native"
   },
   "dependencies": {

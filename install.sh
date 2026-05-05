@@ -90,7 +90,7 @@ fi
 # 9. Install dependencies & build native modules
 # ─────────────────────────────────────────
 echo "⚙️ Installing dependencies..."
-npm install
+npm install --ignore-scripts
 npm run rebuild-native
 npm run generate-secret
 
