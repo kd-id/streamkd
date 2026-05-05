@@ -9,6 +9,7 @@ const path = require('path');
 const loggedAlreadyHasBroadcast = new Set();
 const DEFAULT_YOUTUBE_INGEST_TIMEOUT_MS = 120000;
 const DEFAULT_YOUTUBE_INGEST_POLL_INTERVAL_MS = 3000;
+const DEFAULT_YOUTUBE_INGEST_STABLE_MS = 12000;
 
 function getYouTubeOAuth2Client(clientId, clientSecret, redirectUri) {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
@@ -501,9 +502,15 @@ async function waitForYouTubeStreamActive(streamId, baseUrl = null, options = {}
     options.intervalMs || process.env.YOUTUBE_INGEST_POLL_INTERVAL_MS,
     DEFAULT_YOUTUBE_INGEST_POLL_INTERVAL_MS
   );
+  const configuredStableMs = options.stableMs ?? process.env.YOUTUBE_INGEST_STABLE_MS;
+  const parsedStableMs = parseInt(configuredStableMs, 10);
+  const stableMs = Number.isFinite(parsedStableMs) && parsedStableMs >= 0
+    ? parsedStableMs
+    : DEFAULT_YOUTUBE_INGEST_STABLE_MS;
   const startedAt = Date.now();
   let lastStatus = null;
   let lastError = null;
+  let activeSince = null;
 
   while ((Date.now() - startedAt) <= timeoutMs) {
     try {
@@ -511,10 +518,19 @@ async function waitForYouTubeStreamActive(streamId, baseUrl = null, options = {}
       lastError = null;
 
       if (lastStatus.streamStatus === 'active') {
-        return {
-          success: true,
-          ...lastStatus
-        };
+        if (!activeSince) {
+          activeSince = Date.now();
+        }
+
+        if (stableMs === 0 || Date.now() - activeSince >= stableMs) {
+          return {
+            success: true,
+            stableMs,
+            ...lastStatus
+          };
+        }
+      } else {
+        activeSince = null;
       }
 
       if (lastStatus.streamStatus === 'error') {

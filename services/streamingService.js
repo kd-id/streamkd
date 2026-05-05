@@ -197,6 +197,10 @@ const startingStreams = new Set();
 const streamSpeedSamples = new Map();
 const streamQualityTier = new Map();
 const adaptiveDowngrading = new Set();
+const youtubeIngestIssueSamples = new Map();
+const youtubeRestartCooldown = new Map();
+const youtubeForceTranscodeStreams = new Set();
+const restartingStreams = new Set();
 
 const MAX_LOG_LINES = 50;
 const MAX_RETRY_ATTEMPTS = 15;
@@ -205,6 +209,9 @@ const MAX_RETRY_DELAY = 30000;
 const HEALTH_CHECK_INTERVAL = 30000;
 const SYNC_INTERVAL = 60000;
 const STREAM_START_TIMEOUT = 15000;
+const YOUTUBE_INGEST_BAD_CHECKS = parsePositiveInt(process.env.YOUTUBE_INGEST_BAD_CHECKS, 2);
+const YOUTUBE_INGEST_RESTART_COOLDOWN_MS = parsePositiveInt(process.env.YOUTUBE_INGEST_RESTART_COOLDOWN_MS, 60000);
+const YOUTUBE_FORCE_TRANSCODE = /^(1|true|yes)$/i.test(process.env.YOUTUBE_FORCE_TRANSCODE || '');
 
 // Adaptive Quality - Real-time speed monitoring
 const ADAPTIVE_SPEED_THRESHOLD = 0.9;
@@ -270,6 +277,10 @@ function cleanupStreamData(streamId) {
   streamSpeedSamples.delete(streamId);
   streamQualityTier.delete(streamId);
   adaptiveDowngrading.delete(streamId);
+  youtubeIngestIssueSamples.delete(streamId);
+  youtubeRestartCooldown.delete(streamId);
+  youtubeForceTranscodeStreams.delete(streamId);
+  restartingStreams.delete(streamId);
 }
 
 function getRetryDelay(retryCount) {
@@ -297,6 +308,25 @@ function isYouTubeDestination(stream) {
 
   const rtmpUrl = (stream.rtmp_url || '').toLowerCase();
   return rtmpUrl.includes('youtube.com');
+}
+
+function shouldForceYouTubeTranscode(stream) {
+  return isYouTubeDestination(stream) && (YOUTUBE_FORCE_TRANSCODE || youtubeForceTranscodeStreams.has(stream.id));
+}
+
+function formatYouTubeIngestStatus(statusInfo) {
+  if (!statusInfo) {
+    return 'streamStatus=unknown';
+  }
+
+  const parts = [`streamStatus=${statusInfo.streamStatus || 'unknown'}`];
+  if (statusInfo.healthStatus) {
+    parts.push(`health=${statusInfo.healthStatus}`);
+  }
+  if (statusInfo.issues && statusInfo.issues.length > 0) {
+    parts.push(`issue=${statusInfo.issues[0]}`);
+  }
+  return parts.join(', ');
 }
 
 function isProgressLogLine(line) {
@@ -965,7 +995,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
 
   // --- NORMAL MODE (Existing Logic) ---
   if (!hasAudio) {
-    if (!stream.use_advanced_settings) {
+    if (!stream.use_advanced_settings && !shouldForceYouTubeTranscode(stream)) {
       return [
         '-nostdin',
         '-loglevel', 'warning',
@@ -990,7 +1020,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     const canCopyNoAudio = await checkPlaylistCopyCompatible(videoPaths);
     const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
-    if (canCopyNoAudio) {
+    if (canCopyNoAudio && !shouldForceYouTubeTranscode(stream)) {
       // COPY MODE: Video already H.264/yuv420p — skip transcode
       console.log(`[StreamingService] Copy Mode: Playlist no-audio (advanced forced). Video copy.`);
       return [
@@ -1074,11 +1104,11 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   // --- SMART COPY + ADAPTIVE QUALITY for Playlist with Custom Audio ---
   // If all videos are already H.264/yuv420p (optimized), use -c:v copy = near-zero CPU
   // Otherwise fallback to transcode with adaptive quality based on active stream count
-  let canCopyVideo = await checkPlaylistCopyCompatible(videoPaths);
+  let canCopyVideo = !shouldForceYouTubeTranscode(stream) && await checkPlaylistCopyCompatible(videoPaths);
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
   // For single-video playlists, try transcode cache if not copy-compatible
-  if (!canCopyVideo && videoPaths.length === 1) {
+  if (!canCopyVideo && !shouldForceYouTubeTranscode(stream) && videoPaths.length === 1) {
     const vp = videoPaths[0];
     if (hasTranscodeCache(vp)) {
       const cachedPath = getTranscodeCachePath(vp);
@@ -1109,7 +1139,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     }
   }
 
-  if (canCopyVideo) {
+  if (canCopyVideo && !shouldForceYouTubeTranscode(stream)) {
     // COPY MODE: Video already optimized — CPU ~5% instead of 100%
     console.log(`[StreamingService] Copy Mode: Video+Audio playlist (${activeCount} active streams). Video copy, audio encode only.`);
     return [
@@ -1216,7 +1246,7 @@ async function buildFFmpegArgs(stream) {
   const loopValue = stream.loop_video ? '-1' : '0';
   const isImg = isImageFile(video.filepath);
 
-  if (!stream.use_advanced_settings) {
+  if (!stream.use_advanced_settings && !shouldForceYouTubeTranscode(stream)) {
     if (isImg) {
       // Force transcode for single image even if advanced settings are off
       const resolution = stream.resolution || '1280x720';
@@ -1280,9 +1310,9 @@ async function buildFFmpegArgs(stream) {
   // Check 1: Is original video copy-compatible?
   // Check 2: Is there a cached transcode from previous stream?
   let effectiveVideoPath = videoPath;
-  let canCopy = !isImg && await checkSingleVideoCopyCompatible(videoPath);
+  let canCopy = !isImg && !shouldForceYouTubeTranscode(stream) && await checkSingleVideoCopyCompatible(videoPath);
 
-  if (!canCopy && !isImg) {
+  if (!canCopy && !isImg && !shouldForceYouTubeTranscode(stream)) {
     // Check for transcode cache
     if (hasTranscodeCache(videoPath)) {
       effectiveVideoPath = getTranscodeCachePath(videoPath);
@@ -1303,7 +1333,7 @@ async function buildFFmpegArgs(stream) {
 
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
-  if (canCopy) {
+  if (canCopy && !shouldForceYouTubeTranscode(stream)) {
     // COPY MODE: Video already H.264/yuv420p (or cached) — near-zero CPU
     console.log(`[StreamingService] Copy Mode: Single video (${activeCount} active). Skipping transcode.`);
     return [
@@ -1430,9 +1460,11 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
           return { success: false, error: 'Stream is already active' };
         }
         addStreamLog(streamId, 'Killing existing FFmpeg process before restart...');
+        restartingStreams.add(streamId);
         manuallyStoppingStreams.add(streamId);
         await killFFmpegProcess(streamId, existing);
         manuallyStoppingStreams.delete(streamId);
+        restartingStreams.delete(streamId);
       }
       activeStreams.delete(streamId);
     }
@@ -1515,6 +1547,7 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       pid: ffmpegProcess.pid,
       lastActivity: Date.now(),
       isCopyMode: ffmpegArgs.includes('-c:v') && ffmpegArgs[ffmpegArgs.indexOf('-c:v') + 1] === 'copy',
+      baseUrl: effectiveBaseUrl,
       streamId
     });
 
@@ -1578,7 +1611,9 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
 
       if (isManualStop) {
         manuallyStoppingStreams.delete(streamId);
-        cleanupStreamData(streamId);
+        if (!restartingStreams.has(streamId)) {
+          cleanupStreamData(streamId);
+        }
         return;
       }
 
@@ -1919,6 +1954,104 @@ async function syncStreamStatuses() {
   } catch (error) { }
 }
 
+function setNextYouTubeRecoveryTier(streamId) {
+  const currentTier = streamQualityTier.get(streamId) || 0;
+  const nextTier = Math.min(Math.max(currentTier + 1, 1), QUALITY_TIERS.length - 1);
+  streamQualityTier.set(streamId, nextTier);
+  return QUALITY_TIERS[nextTier];
+}
+
+async function recoverYouTubeIngestDrop(streamId, stream, streamData, statusInfo) {
+  if (startingStreams.has(streamId) || restartingStreams.has(streamId) || manuallyStoppingStreams.has(streamId)) {
+    return true;
+  }
+
+  const now = Date.now();
+  const lastRestartAt = youtubeRestartCooldown.get(streamId) || 0;
+  if (now - lastRestartAt < YOUTUBE_INGEST_RESTART_COOLDOWN_MS) {
+    addStreamLog(streamId, `[YouTube] Ingest masih bermasalah, menunggu cooldown restart. ${formatYouTubeIngestStatus(statusInfo)}`);
+    return false;
+  }
+
+  youtubeRestartCooldown.set(streamId, now);
+  youtubeIngestIssueSamples.delete(streamId);
+  youtubeForceTranscodeStreams.add(streamId);
+  streamSpeedSamples.delete(streamId);
+  const recoveryTier = setNextYouTubeRecoveryTier(streamId);
+
+  addStreamLog(streamId, `[YouTube] Studio kembali No Data. Restart dengan transcode ${recoveryTier.label} (${recoveryTier.bitrate}kbps).`);
+
+  try {
+    await Stream.update(streamId, { use_advanced_settings: true });
+  } catch (error) {
+    addStreamLog(streamId, `[YouTube] Failed to persist recovery transcode mode: ${error.message}`);
+  }
+
+  restartingStreams.add(streamId);
+  manuallyStoppingStreams.add(streamId);
+  try {
+    await killFFmpegProcess(streamId, streamData);
+  } finally {
+    activeStreams.delete(streamId);
+    manuallyStoppingStreams.delete(streamId);
+  }
+
+  setTimeout(async () => {
+    try {
+      const currentStream = await Stream.findById(streamId);
+      if (!currentStream || currentStream.status !== 'live') {
+        return;
+      }
+
+      const result = await startStream(streamId, true, streamData.baseUrl);
+      if (!result.success) {
+        addStreamLog(streamId, `[YouTube] Recovery restart failed: ${result.error}`);
+        await Stream.updateStatus(streamId, 'offline', stream.user_id, { preserveEndTime: true });
+        broadcastStatusUpdate(streamId, 'offline');
+        cleanupStreamData(streamId);
+      }
+    } catch (error) {
+      addStreamLog(streamId, `[YouTube] Recovery restart error: ${error.message}`);
+    } finally {
+      restartingStreams.delete(streamId);
+    }
+  }, 3000);
+
+  return true;
+}
+
+async function checkYouTubeIngestHealth(streamId, stream, streamData) {
+  if (!stream || !stream.is_youtube_api || stream.status !== 'live') {
+    youtubeIngestIssueSamples.delete(streamId);
+    return false;
+  }
+
+  try {
+    const youtubeService = require('./youtubeService');
+    const statusInfo = await youtubeService.getYouTubeIngestStatus(streamId, streamData.baseUrl);
+
+    if (statusInfo.streamStatus === 'active') {
+      if (youtubeIngestIssueSamples.has(streamId)) {
+        addStreamLog(streamId, `[YouTube] Ingest pulih: ${formatYouTubeIngestStatus(statusInfo)}`);
+      }
+      youtubeIngestIssueSamples.delete(streamId);
+      return false;
+    }
+
+    const failedChecks = (youtubeIngestIssueSamples.get(streamId) || 0) + 1;
+    youtubeIngestIssueSamples.set(streamId, failedChecks);
+    addStreamLog(streamId, `[YouTube] Ingest tidak aktif (${failedChecks}/${YOUTUBE_INGEST_BAD_CHECKS}): ${formatYouTubeIngestStatus(statusInfo)}`);
+
+    if (failedChecks >= YOUTUBE_INGEST_BAD_CHECKS) {
+      return await recoverYouTubeIngestDrop(streamId, stream, streamData, statusInfo);
+    }
+  } catch (error) {
+    addStreamLog(streamId, `[YouTube] Ingest health check skipped: ${error.message}`);
+  }
+
+  return false;
+}
+
 async function healthCheckStreams() {
   try {
     const now = Date.now();
@@ -1943,10 +2076,18 @@ async function healthCheckStreams() {
         continue;
       }
 
+      const streamForIngestCheck = await Stream.findById(streamId);
+      if (streamForIngestCheck && streamForIngestCheck.is_youtube_api && streamForIngestCheck.status === 'live') {
+        const recoveryStarted = await checkYouTubeIngestHealth(streamId, streamForIngestCheck, streamData);
+        if (recoveryStarted) {
+          continue;
+        }
+      }
+
       if (streamData.lastActivity && (now - streamData.lastActivity) > staleThreshold) {
         addStreamLog(streamId, 'Stream appears stale, restarting...');
 
-        const stream = await Stream.findById(streamId);
+        const stream = streamForIngestCheck || await Stream.findById(streamId);
         if (stream && stream.status === 'live') {
           if (stream.end_time) {
             const endTime = new Date(stream.end_time);
