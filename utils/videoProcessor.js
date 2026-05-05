@@ -5,6 +5,14 @@ const fs = require('fs');
 const path = require('path');
 const { getUniqueFilename, paths } = require('./storage');
 ffmpeg.setFfmpegPath(ffmpegPath);
+const OPTIMIZED_STREAMING_PROFILE = {
+  resolution: '1280x720',
+  bitrate: 2500,
+  fps: 30,
+  audioBitrate: 128,
+  audioSampleRate: 44100
+};
+
 const getVideoInfo = async (filepath) => {
   try {
     const duration = await getVideoDurationInSeconds(filepath);
@@ -60,26 +68,33 @@ const generateImageThumbnail = (imagePath, thumbnailName) => {
 
 const optimizeVideo = (videoPath, outputPath) => {
   return new Promise((resolve, reject) => {
+    const keyframeInterval = OPTIMIZED_STREAMING_PROFILE.fps * 2;
+
     ffmpeg(videoPath)
       .outputOptions([
+        '-vf scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30',
         '-c:v libx264',
         '-preset superfast',
-        '-b:v 5000k',
+        '-tune zerolatency',
+        '-b:v 2500k',
         '-profile:v main',
         '-level 4.1',
         '-pix_fmt yuv420p',
-        '-maxrate 5000k',
-        '-minrate 5000k',
-        '-bufsize 10000k',
-        '-g 60',
-        '-keyint_min 30',
-        '-x264opts keyint=60:min-keyint=30:no-scenecut',
+        '-maxrate 2500k',
+        '-minrate 2500k',
+        '-bufsize 5000k',
+        `-g ${keyframeInterval}`,
+        `-keyint_min ${keyframeInterval}`,
+        `-x264opts keyint=${keyframeInterval}:min-keyint=${keyframeInterval}:no-scenecut`,
+        '-sc_threshold 0',
+        '-force_key_frames expr:gte(t,n_forced*2)',
         '-r 30',
-        '-vsync 1',
+        '-vsync cfr',
         '-c:a aac',
         '-b:a 128k',
         '-ar 44100',
         '-shortest',
+        '-movflags +faststart',
         '-threads 1' // Keep it low priority
       ])
       .output(outputPath)
@@ -98,5 +113,6 @@ module.exports = {
   getVideoInfo,
   generateThumbnail,
   generateImageThumbnail,
-  optimizeVideo
+  optimizeVideo,
+  OPTIMIZED_STREAMING_PROFILE
 };

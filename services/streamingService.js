@@ -117,17 +117,20 @@ async function createTranscodeCache(videoPath) {
       '-i', videoPath,
       '-c:v', 'libx264',
       '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
       '-profile:v', 'main',
       '-pix_fmt', 'yuv420p',
-      '-b:v', '5000k',
-      '-maxrate', '5000k',
-      '-minrate', '5000k',
-      '-bufsize', '10000k',
+      '-b:v', '2500k',
+      '-maxrate', '2500k',
+      '-minrate', '2500k',
+      '-bufsize', '5000k',
       '-g', '60',
-      '-keyint_min', '30',
-      '-x264opts', 'keyint=60:min-keyint=30:no-scenecut',
+      '-keyint_min', '60',
+      '-x264opts', 'keyint=60:min-keyint=60:no-scenecut',
+      '-sc_threshold', '0',
+      '-force_key_frames', 'expr:gte(t,n_forced*2)',
       '-r', '30',
-      '-vsync', '1',
+      '-vsync', 'cfr',
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ar', '44100',
@@ -486,6 +489,75 @@ function runFFprobe(filePath) {
   });
 }
 
+function runFFprobeKeyframes(filePath) {
+  return new Promise((resolve, reject) => {
+    const ffprobeProcess = spawn(ffprobePath, [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-skip_frame', 'nokey',
+      '-show_entries', 'frame=best_effort_timestamp_time,pkt_pts_time,pts_time',
+      '-of', 'json',
+      filePath
+    ], {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    ffprobeProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    ffprobeProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    ffprobeProcess.on('error', reject);
+    ffprobeProcess.on('exit', (code) => {
+      if (code !== 0) {
+        return reject(new Error(stderr.trim() || `ffprobe keyframe scan exited with code ${code}`));
+      }
+
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+async function getMaxKeyframeIntervalSeconds(filePath) {
+  const probeData = await runFFprobeKeyframes(filePath);
+  const timestamps = (probeData.frames || [])
+    .map(frame => parseFloat(frame.best_effort_timestamp_time || frame.pkt_pts_time || frame.pts_time))
+    .filter(value => Number.isFinite(value))
+    .sort((a, b) => a - b);
+
+  if (timestamps.length < 2) {
+    return 0;
+  }
+
+  let maxInterval = 0;
+  for (let i = 1; i < timestamps.length; i++) {
+    maxInterval = Math.max(maxInterval, timestamps[i] - timestamps[i - 1]);
+  }
+
+  return maxInterval;
+}
+
+async function isYouTubeKeyframeIntervalCompatible(filePath) {
+  try {
+    const maxInterval = await getMaxKeyframeIntervalSeconds(filePath);
+    return maxInterval === 0 || maxInterval <= 2.2;
+  } catch (error) {
+    console.warn(`[StreamingService] Keyframe check failed for ${path.basename(filePath)}: ${error.message}`);
+    return false;
+  }
+}
+
 function validateYouTubeCopyVideoProbe(probeData, label, isImage = false) {
   const videoStream = getPrimaryStream(probeData, 'video');
   if (!videoStream) {
@@ -611,6 +683,15 @@ async function validateCopyModeCompatibilityForInput({
         throw createUnsupportedCopyModeError(compatibilityError);
       }
 
+      if (!isImg) {
+        const maxKeyframeInterval = await getMaxKeyframeIntervalSeconds(resolvePublicFilePath(video.filepath));
+        if (maxKeyframeInterval > 2.2) {
+          throw createUnsupportedCopyModeError(
+            buildCopyModeCompatibilityError(label, `keyframe interval ${maxKeyframeInterval.toFixed(1)} detik, harus maksimal 2 detik`)
+          );
+        }
+      }
+
       const currentVideoStream = getPrimaryStream(probeData, 'video');
       if (!referenceVideoStream) {
         referenceVideoStream = currentVideoStream;
@@ -642,14 +723,27 @@ async function validateCopyModeCompatibilityForInput({
   }
 
   const isImg = isImageFile(video.filepath);
+  const videoPath = resolvePublicFilePath(video.filepath);
   const compatibilityError = validateYouTubeCopyVideoProbe(
-    await runFFprobe(resolvePublicFilePath(video.filepath)),
+    await runFFprobe(videoPath),
     buildMediaLabel(video, 0, 'Video'),
     isImg
   );
 
   if (compatibilityError) {
     throw createUnsupportedCopyModeError(compatibilityError);
+  }
+
+  if (!isImg) {
+    const maxKeyframeInterval = await getMaxKeyframeIntervalSeconds(videoPath);
+    if (maxKeyframeInterval > 2.2) {
+      throw createUnsupportedCopyModeError(
+        buildCopyModeCompatibilityError(
+          buildMediaLabel(video, 0, 'Video'),
+          `keyframe interval ${maxKeyframeInterval.toFixed(1)} detik, harus maksimal 2 detik`
+        )
+      );
+    }
   }
 }
 
@@ -664,6 +758,7 @@ async function checkPlaylistCopyCompatible(videoPaths) {
       const codec = (videoStream.codec_name || '').toLowerCase();
       if (codec !== 'h264') return false;
       if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
+      if (!await isYouTubeKeyframeIntervalCompatible(vp)) return false;
 
       // Check consistency across playlist items
       if (!referenceStream) {
@@ -687,6 +782,7 @@ async function checkSingleVideoCopyCompatible(videoPath) {
     const codec = (videoStream.codec_name || '').toLowerCase();
     if (codec !== 'h264') return false;
     if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
+    if (!await isYouTubeKeyframeIntervalCompatible(videoPath)) return false;
     const audioStream = getPrimaryStream(probeData, 'audio');
     if (audioStream) {
       const acodec = (audioStream.codec_name || '').toLowerCase();

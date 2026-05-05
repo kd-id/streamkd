@@ -2330,6 +2330,7 @@ app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
     }
 
     const videoProcessor = require('./utils/videoProcessor');
+    const optimizedProfile = videoProcessor.OPTIMIZED_STREAMING_PROFILE;
     const inputPath = path.join(__dirname, 'public', video.filepath);
     const outputFilename = `optimized_${Date.now()}_${path.basename(video.filepath)}`;
     const outputRelPath = path.join(path.dirname(video.filepath), outputFilename).replace(/\\/g, '/');
@@ -2364,9 +2365,9 @@ app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
           duration: video.duration,
           folder_id: video.folder_id,
           format: 'mp4',
-          resolution: '1280x720',
-          bitrate: 2500,
-          fps: 30
+          resolution: optimizedProfile.resolution,
+          bitrate: optimizedProfile.bitrate,
+          fps: optimizedProfile.fps
         });
         const existingJob = optimizationJobs.get(jobId) || {};
         optimizationJobs.set(jobId, {
