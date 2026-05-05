@@ -691,7 +691,7 @@
           <p>
             StreamFlow is released under the MIT License. You are free to use, modify, and distribute this 
             software for personal or commercial purposes. See the 
-            <a href="https://github.com/bangtutorial/streamflow/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">LICENSE</a> 
+            <a href="https://github.com/kd-id/streamkd/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">LICENSE</a> 
             file for more details.
           </p>
           <h4 class="text-white font-medium pt-4">Contributors</h4>
@@ -704,8 +704,8 @@
           </div>
           <h4 class="text-white font-medium pt-4">Links</h4>
           <ul class="list-disc list-inside space-y-1">
-            <li><a href="https://github.com/bangtutorial/streamflow" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">GitHub Repository</a></li>
-            <li><a href="https://github.com/bangtutorial/streamflow/issues" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">Report Issues</a></li>
+            <li><a href="https://github.com/kd-id/streamkd" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">GitHub Repository</a></li>
+            <li><a href="https://github.com/kd-id/streamkd/issues" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">Report Issues</a></li>
             <li><a href="https://youtube.com/bangtutorial" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">YouTube Channel</a></li>
           </ul>
           <div class="border-t border-gray-700 pt-6 mt-6">
@@ -1342,7 +1342,7 @@
   async function loadContributors() {
     const container = document.getElementById('contributors-container');
     try {
-      const response = await fetch('https://api.github.com/repos/bangtutorial/streamflow/contributors');
+      const response = await fetch('https://api.github.com/repos/kd-id/streamkd/contributors');
       if (!response.ok) throw new Error('Failed to fetch');
       const contributors = await response.json();
       container.innerHTML = contributors.map(c => `
@@ -1351,7 +1351,7 @@
         </a>
       `).join('');
     } catch (error) {
-      container.innerHTML = '<a href="https://github.com/bangtutorial/streamflow/graphs/contributors" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline text-sm">View contributors on GitHub</a>';
+      container.innerHTML = '<a href="https://github.com/kd-id/streamkd/graphs/contributors" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline text-sm">View contributors on GitHub</a>';
     }
   }
 

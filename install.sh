@@ -95,7 +95,7 @@ if [ -d "$HOME/streamflow" ]; then
     cd "$HOME/streamflow"
     git pull
 else
-    git clone https://github.com/bangtutorial/streamflow "$HOME/streamflow"
+    git clone https://github.com/kd-id/streamkd "$HOME/streamflow"
     cd "$HOME/streamflow"
 fi
 

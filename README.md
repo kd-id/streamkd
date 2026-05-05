@@ -4,15 +4,15 @@
 
 ## StreamFlow: Web-Based Multi-Platform Streaming
 
-[![Version](https://img.shields.io/badge/version-2.2.2-blue.svg)](https://github.com/bangtutorial/streamflow/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/bangtutorial/streamflow/blob/main/LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/bangtutorial/streamflow/blob/main/CONTRIBUTING.md)
-[![GitHub Stars](https://img.shields.io/github/stars/bangtutorial/streamflow?style=social)](https://github.com/bangtutorial/streamflow/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/bangtutorial/streamflow?style=social)](https://github.com/bangtutorial/streamflow/network/members)
+[![Version](https://img.shields.io/badge/version-2.2.2-blue.svg)](https://github.com/kd-id/streamkd/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/kd-id/streamkd/blob/main/LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/kd-id/streamkd/blob/main/CONTRIBUTING.md)
+[![GitHub Stars](https://img.shields.io/github/stars/kd-id/streamkd?style=social)](https://github.com/kd-id/streamkd/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/kd-id/streamkd?style=social)](https://github.com/kd-id/streamkd/network/members)
 
 **StreamFlow** adalah platform live streaming berbasis web yang powerful dan mudah digunakan. Streaming ke YouTube, Facebook, dan platform RTMP lainnya secara bersamaan dengan satu aplikasi. Dilengkapi dengan video management, scheduled streaming, dan real-time monitoring untuk pengalaman streaming yang profesional.
 
-[🚀 Installation](#-quick-installation) • [📖 Documentation](#-manual-installation) • [🐳 Docker](#-docker-deployment) • [🪛 Troubleshooting](#-troubleshooting) • [💬 Community](https://github.com/bangtutorial/streamflow/discussions)
+[🚀 Installation](#-quick-installation) • [📖 Documentation](#-manual-installation) • [🐳 Docker](#-docker-deployment) • [🪛 Troubleshooting](#-troubleshooting) • [💬 Community](https://github.com/kd-id/streamkd/discussions)
 
 ![screenshot](https://github.com/user-attachments/assets/fef1c0a5-04f6-41ae-8ea1-5eb1fff13a22)
 
@@ -46,7 +46,7 @@
 Untuk instalasi otomatis, jalankan perintah berikut:
 
 ```bash
-curl -o install.sh https://raw.githubusercontent.com/bangtutorial/streamflow/main/install.sh && chmod +x install.sh && ./install.sh
+curl -o install.sh https://raw.githubusercontent.com/kd-id/streamkd/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
 ## 🔧 Manual Installation
@@ -89,7 +89,7 @@ sudo apt install git -y
 
 Clone repository:
 ```bash
-git clone https://github.com/bangtutorial/streamflow
+git clone https://github.com/kd-id/streamkd
 ```
 
 Masuk ke direktori project:
@@ -308,11 +308,11 @@ pm2 restart streamflow
 
 ## 💫 Contributors
 
-[![Contributors](https://contrib.rocks/image?repo=bangtutorial/streamflow)](https://github.com/bangtutorial/streamflow/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=kd-id/streamkd)](https://github.com/kd-id/streamkd/graphs/contributors)
 
 ## 📄 License
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/bangtutorial/streamflow/blob/main/LICENSE)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/kd-id/streamkd/blob/main/LICENSE)
 
 ---
 © 2026 - [Bang Tutorial](https://youtube.com/bangtutorial)
