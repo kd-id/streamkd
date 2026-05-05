@@ -48,14 +48,14 @@ function parsePositiveInt(value, fallback) {
 
 function getSlideshowFps(stream) {
   const configuredFps = parsePositiveInt(stream.fps, 30);
-  const maxFps = parsePositiveInt(process.env.SLIDESHOW_MAX_FPS, 15);
-  return Math.max(10, Math.min(configuredFps, maxFps));
+  const maxFps = parsePositiveInt(process.env.SLIDESHOW_MAX_FPS, 30);
+  return Math.max(20, Math.min(configuredFps, maxFps));
 }
 
 function getSlideshowBitrate(stream) {
-  const configuredBitrate = parsePositiveInt(stream.bitrate, 1800);
-  const maxBitrate = parsePositiveInt(process.env.SLIDESHOW_MAX_BITRATE, 1800);
-  return Math.max(800, Math.min(configuredBitrate, maxBitrate));
+  const configuredBitrate = parsePositiveInt(stream.bitrate, 4000);
+  const maxBitrate = parsePositiveInt(process.env.SLIDESHOW_MAX_BITRATE, 6800);
+  return Math.max(2500, Math.min(configuredBitrate, maxBitrate));
 }
 
 async function runFfmpeg(args) {
@@ -119,11 +119,15 @@ async function createTranscodeCache(videoPath) {
       '-preset', 'ultrafast',
       '-profile:v', 'main',
       '-pix_fmt', 'yuv420p',
-      '-crf', '20',
+      '-b:v', '5000k',
       '-maxrate', '5000k',
+      '-minrate', '5000k',
       '-bufsize', '10000k',
       '-g', '60',
+      '-keyint_min', '30',
+      '-x264opts', 'keyint=60:min-keyint=30:no-scenecut',
       '-r', '30',
+      '-vsync', '1',
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ar', '44100',
@@ -171,10 +175,13 @@ async function renderStaticSlideshowVideo({ streamId, videoPaths, tempDir, resol
     '-pix_fmt', 'yuv420p',
     '-b:v', `${bitrate}k`,
     '-maxrate', `${bitrate}k`,
+    '-minrate', `${bitrate}k`,
     '-bufsize', `${bitrate * 2}k`,
     '-r', String(fps),
+    '-vsync', '1',
     '-g', String(fps * 2),
     '-keyint_min', String(fps),
+    '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
     '-movflags', '+faststart',
     outputPath
   ]);
@@ -655,31 +662,23 @@ function getAdaptiveSettings(stream, activeCount) {
   }
 
   const resolution = stream.resolution || '1280x720';
-  const bitrate = stream.bitrate || 2500;
+  const bitrate = stream.bitrate || (resolution.includes('1080') ? 6000 : 3000);
   const fps = stream.fps || 30;
 
   let finalBitrate = bitrate;
   let finalResolution = resolution;
-  let preset = 'ultrafast';
+  let preset = 'superfast';
 
-  if (activeCount === 0) {
-    preset = 'superfast';
-  } else if (activeCount === 1) {
-    finalBitrate = Math.round(bitrate * 0.85);
+  if (activeCount > 0) {
     preset = 'ultrafast';
-  } else {
-    finalBitrate = Math.round(bitrate * 0.7);
-    preset = 'ultrafast';
-    if (resolution.includes('1080') || resolution.includes('1920')) {
-      finalResolution = '1280x720';
-    }
+    finalBitrate = Math.max(bitrate * 0.85, resolution.includes('1080') ? 5000 : 2500);
   }
 
   if (activeCount > 0) {
     console.log(`[StreamingService] Adaptive: ${activeCount} active. ${finalResolution} @ ${finalBitrate}k preset=${preset}`);
   }
 
-  return { finalBitrate, finalResolution, preset, fps };
+  return { finalBitrate: Math.round(finalBitrate), finalResolution, preset, fps };
 }
 
 function waitForStreamStartup(streamId, ffmpegProcess, startupState) {
@@ -936,8 +935,8 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     args.push('-map', '[v]');
     args.push('-map', `${circularPaths.length}:a:0`);
     args.push('-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', 'main', '-pix_fmt', 'yuv420p');
-    args.push('-b:v', `${bitrate}k`, '-maxrate', `${bitrate}k`, '-bufsize', `${bitrate * 2}k`);
-    args.push('-s', resolution, '-r', fps, '-g', fps * 2, '-keyint_min', fps, '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`);
+    args.push('-b:v', `${bitrate}k`, '-maxrate', `${bitrate}k`, '-minrate', `${bitrate}k`, '-bufsize', `${bitrate * 2}k`);
+    args.push('-s', resolution, '-r', fps, '-vsync', '1', '-g', fps * 2, '-keyint_min', fps, '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`);
     args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '44100');
     args.push('-f', 'flv', '-flvflags', 'no_duration_filesize', rtmpUrl);
 
@@ -1014,9 +1013,11 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       '-pix_fmt', 'yuv420p',
       '-b:v', `${adaptive.finalBitrate}k`,
       '-maxrate', `${adaptive.finalBitrate}k`,
+      '-minrate', `${adaptive.finalBitrate}k`,
       '-bufsize', `${adaptive.finalBitrate * 2}k`,
       '-s', adaptive.finalResolution,
       '-r', adaptive.fps,
+      '-vsync', '1',
       '-g', adaptive.fps * 2,
       '-keyint_min', adaptive.fps,
       '-x264opts', `keyint=${adaptive.fps * 2}:min-keyint=${adaptive.fps}:no-scenecut`,
@@ -1147,13 +1148,15 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     '-profile:v', 'main',
     '-pix_fmt', 'yuv420p',
     '-b:v', `${adaptive.finalBitrate}k`,
-    '-maxrate', `${adaptive.finalBitrate}k`,
-    '-bufsize', `${adaptive.finalBitrate * 2}k`,
-    '-s', adaptive.finalResolution,
-    '-r', adaptive.fps,
-    '-g', adaptive.fps * 2,
-    '-keyint_min', adaptive.fps,
-    '-x264opts', `keyint=${adaptive.fps * 2}:min-keyint=${adaptive.fps}:no-scenecut`,
+      '-maxrate', `${adaptive.finalBitrate}k`,
+      '-minrate', `${adaptive.finalBitrate}k`,
+      '-bufsize', `${adaptive.finalBitrate * 2}k`,
+      '-s', adaptive.finalResolution,
+      '-r', adaptive.fps,
+      '-vsync', '1',
+      '-g', adaptive.fps * 2,
+      '-keyint_min', adaptive.fps,
+      '-x264opts', `keyint=${adaptive.fps * 2}:min-keyint=${adaptive.fps}:no-scenecut`,
     '-c:a', audioCodec,
   ];
 
@@ -1213,10 +1216,14 @@ async function buildFFmpegArgs(stream) {
         '-pix_fmt', 'yuv420p',
         '-b:v', `${bitrate}k`,
         '-maxrate', `${bitrate}k`,
+        '-minrate', `${bitrate}k`,
         '-bufsize', `${bitrate * 2}k`,
         '-s', resolution,
         '-r', fps,
+        '-vsync', '1',
         '-g', fps * 2,
+        '-keyint_min', fps,
+        '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
         '-c:a', 'aac',
         '-b:a', '128k',
         '-ar', '44100',
@@ -1321,9 +1328,11 @@ async function buildFFmpegArgs(stream) {
     '-pix_fmt', 'yuv420p',
     '-b:v', `${finalBitrate}k`,
     '-maxrate', `${finalBitrate}k`,
+    '-minrate', `${finalBitrate}k`,
     '-bufsize', `${finalBitrate * 2}k`,
     '-s', finalResolution,
     '-r', fps,
+    '-vsync', '1',
     '-g', fps * 2,
     '-keyint_min', fps,
     '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
