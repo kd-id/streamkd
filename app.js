@@ -11,6 +11,7 @@ if (!fs.existsSync(dbDir)) {
 
 require('./services/logger.js');
 const express = require('express');
+const http = require('http');
 const { Server } = require("socket.io");
 
 const engine = require('ejs-mate');
@@ -203,6 +204,12 @@ app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Service-Worker-Allowed', '/');
   res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+
+app.get('/assets/socket.io/socket.io.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'node_modules', 'socket.io', 'client-dist', 'socket.io.js'));
 });
 
 app.use('/uploads', function (req, res, next) {
@@ -5212,11 +5219,12 @@ app.delete('/api/ai/prompt-history/:id', isAuthenticated, async (req, res) => {
   }
 });
 
-const server = app.listen(port, '0.0.0.0', async () => {
-  const io = new Server(server, { cors: { origin: "*" } });
-  global.io = io;
-  streamingService.setSocketIo(io);
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+global.io = io;
+streamingService.setSocketIo(io);
 
+server.listen(port, '0.0.0.0', async () => {
   try {
     await initializeDatabase();
   } catch (error) {
