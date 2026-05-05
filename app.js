@@ -1,5 +1,6 @@
 const path = require('path');
 const axios = require('axios');
+const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const fs = require('fs');
@@ -239,6 +240,58 @@ const isAdmin = async (req, res, next) => {
     res.redirect('/dashboard');
   }
 };
+
+function trimTrailingSlash(value) {
+  return (value || '').trim().replace(/\/+$/, '');
+}
+
+function getConfiguredBaseUrl() {
+  return trimTrailingSlash(
+    process.env.YOUTUBE_BASE_URL ||
+    process.env.APP_BASE_URL ||
+    process.env.PUBLIC_BASE_URL ||
+    process.env.BASE_URL ||
+    ''
+  );
+}
+
+function getPublicBaseUrl(req) {
+  const configuredBaseUrl = getConfiguredBaseUrl();
+  if (configuredBaseUrl) return configuredBaseUrl;
+
+  const protocol = (req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
+  return trimTrailingSlash(`${protocol}://${host}`);
+}
+
+function getYouTubeRedirectUri(req) {
+  return trimTrailingSlash(process.env.YOUTUBE_REDIRECT_URI || `${getPublicBaseUrl(req)}/auth/youtube/callback`);
+}
+
+function isLocalOAuthUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+  } catch (error) {
+    return false;
+  }
+}
+
+function getGoogleOAuthRedirectWarning(redirectUri) {
+  try {
+    const parsed = new URL(redirectUri);
+    const isRawIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(parsed.hostname);
+    if (parsed.protocol !== 'https:' && !isLocalOAuthUrl(redirectUri)) {
+      return 'Google OAuth requires an HTTPS redirect URI. Set APP_BASE_URL=https://your-domain.com in .env and add the same redirect URI in Google Cloud Console.';
+    }
+    if (isRawIp && !isLocalOAuthUrl(redirectUri)) {
+      return 'Google OAuth does not allow public IP address redirect URIs. Use a domain with HTTPS, then add that redirect URI in Google Cloud Console.';
+    }
+  } catch (error) {
+    return 'Invalid YouTube redirect URI. Check YOUTUBE_REDIRECT_URI or APP_BASE_URL in .env.';
+  }
+  return null;
+}
 app.use('/uploads', function (req, res, next) {
   res.header('Cache-Control', 'no-cache');
   res.header('Pragma', 'no-cache');
@@ -979,6 +1032,7 @@ app.get('/settings', isAuthenticated, async (req, res) => {
       youtubeChannelThumbnail: defaultChannel?.channel_thumbnail || '',
       youtubeSubscriberCount: defaultChannel?.subscriber_count || '0',
       hasYoutubeCredentials: hasYoutubeCredentials,
+      youtubeRedirectUri: getYouTubeRedirectUri(req),
       recaptchaSiteKey: recaptchaSettings.siteKey || '',
       recaptchaSecretKey: recaptchaSettings.secretKey ? '••••••••••••••••' : '',
       hasRecaptchaKeys: recaptchaSettings.hasKeys,
@@ -2903,9 +2957,11 @@ app.get('/auth/youtube', isAuthenticated, async (req, res) => {
       return res.redirect('/settings?error=Failed to decrypt credentials&activeTab=integration');
     }
     
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    const redirectUri = `${protocol}://${host}/auth/youtube/callback`;
+    const redirectUri = getYouTubeRedirectUri(req);
+    const redirectWarning = getGoogleOAuthRedirectWarning(redirectUri);
+    if (redirectWarning) {
+      return res.redirect(`/settings?error=${encodeURIComponent(redirectWarning)}&activeTab=integration`);
+    }
     
     const oauth2Client = getYouTubeOAuth2Client(user.youtube_client_id, clientSecret, redirectUri);
     
@@ -2915,11 +2971,14 @@ app.get('/auth/youtube', isAuthenticated, async (req, res) => {
       'https://www.googleapis.com/auth/youtube'
     ];
     
+    const oauthState = crypto.randomBytes(24).toString('hex');
+    req.session.youtubeOAuthState = oauthState;
+
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
       prompt: 'consent',
-      state: req.session.userId
+      state: oauthState
     });
     
     res.redirect(authUrl);
@@ -2941,6 +3000,11 @@ app.get('/auth/youtube/callback', isAuthenticated, async (req, res) => {
     if (!code) {
       return res.redirect('/settings?error=No authorization code received&activeTab=integration');
     }
+
+    if (!state || state !== req.session.youtubeOAuthState) {
+      return res.redirect('/settings?error=Invalid YouTube OAuth state. Please try connecting again.&activeTab=integration');
+    }
+    delete req.session.youtubeOAuthState;
     
     const user = await User.findById(req.session.userId);
     
@@ -2953,9 +3017,7 @@ app.get('/auth/youtube/callback', isAuthenticated, async (req, res) => {
       return res.redirect('/settings?error=Failed to decrypt credentials&activeTab=integration');
     }
     
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    const redirectUri = `${protocol}://${host}/auth/youtube/callback`;
+    const redirectUri = getYouTubeRedirectUri(req);
     
     const oauth2Client = getYouTubeOAuth2Client(user.youtube_client_id, clientSecret, redirectUri);
     
@@ -3918,9 +3980,7 @@ app.get('/api/streams/:id', isAuthenticated, async (req, res) => {
           const accessToken = decrypt(user.youtube_access_token);
           const refreshToken = decrypt(user.youtube_refresh_token);
           
-          const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-          const host = req.headers['x-forwarded-host'] || req.get('host');
-          const redirectUri = `${protocol}://${host}/auth/youtube/callback`;
+          const redirectUri = getYouTubeRedirectUri(req);
           
           const oauth2Client = getYouTubeOAuth2Client(user.youtube_client_id, clientSecret, redirectUri);
           oauth2Client.setCredentials({
@@ -4030,9 +4090,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
               const accessToken = decrypt(selectedChannel.access_token);
               const refreshToken = decrypt(selectedChannel.refresh_token);
               
-              const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-              const host = req.headers['x-forwarded-host'] || req.get('host');
-              const redirectUri = `${protocol}://${host}/auth/youtube/callback`;
+              const redirectUri = getYouTubeRedirectUri(req);
               
               const oauth2Client = getYouTubeOAuth2Client(user.youtube_client_id, clientSecret, redirectUri);
               oauth2Client.setCredentials({
@@ -4295,9 +4353,7 @@ app.post('/api/streams/:id/status', isAuthenticated, [
           stream
         });
       }
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-      const host = req.headers['x-forwarded-host'] || req.get('host');
-      const baseUrl = `${protocol}://${host}`;
+      const baseUrl = getPublicBaseUrl(req);
       const result = await streamingService.startStream(streamId, false, baseUrl);
       if (result.success) {
         const updatedStream = await Stream.getStreamWithVideo(streamId);

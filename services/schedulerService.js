@@ -44,7 +44,7 @@ async function checkScheduledStreams() {
         continue;
       }
 
-      const baseUrl = process.env.BASE_URL || 'http://localhost:7575';
+      const baseUrl = process.env.YOUTUBE_BASE_URL || process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:7575';
       const result = await streamingService.startStream(stream.id, false, baseUrl);
 
       if (!result.success) {

@@ -112,6 +112,15 @@ Konfigurasi port (opsional):
 nano .env
 ```
 
+Untuk koneksi YouTube/Google OAuth di VPS, gunakan domain HTTPS, bukan IP publik:
+```env
+APP_BASE_URL=https://domain-anda.com
+```
+Redirect URI yang harus ditambahkan di Google Cloud Console:
+```text
+https://domain-anda.com/auth/youtube/callback
+```
+
 Jalankan aplikasi:
 ```bash
 npm run dev
@@ -244,6 +253,7 @@ Buat file `.env` di root project:
 PORT=7575
 SESSION_SECRET=your_random_secret_here
 NODE_ENV=development
+APP_BASE_URL=https://domain-anda.com
 ```
 
 ### 2. Build dan Jalankan

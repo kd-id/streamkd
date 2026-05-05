@@ -281,7 +281,7 @@
                 <div class="relative flex-1">
                   <input type="text" id="redirect-uri" readonly
                     class="bg-dark-900 text-gray-400 pl-4 pr-12 py-2 rounded-lg block w-full focus:outline-none border border-gray-700 cursor-not-allowed font-mono text-sm"
-                    value="">
+                    value="<%= typeof youtubeRedirectUri !== 'undefined' ? youtubeRedirectUri : '' %>">
                   <button type="button" id="copy-redirect-uri"
                     class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-primary transition-colors"
                     title="Copy to clipboard">
@@ -1143,7 +1143,10 @@
       const connectYoutubeBtn = document.getElementById('connect-youtube');
       const disconnectYoutubeBtn = document.getElementById('disconnect-youtube');
 
+      const configuredRedirectUri = <%- JSON.stringify(typeof youtubeRedirectUri !== 'undefined' ? youtubeRedirectUri : '') %>;
+
       function generateRedirectUri() {
+        if (configuredRedirectUri) return configuredRedirectUri;
         const protocol = window.location.protocol;
         const host = window.location.host;
         return `${protocol}//${host}/auth/youtube/callback`;
