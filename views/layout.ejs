@@ -898,3 +898,19 @@
     }
   });
 </script>
+
+<!-- Real-Time Auto-Sync Script -->
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  if (typeof io !== 'undefined') {
+    window.appSocket = io();
+    window.appSocket.on('streamStatusUpdate', (data) => {
+      console.log('Stream status update received via Socket.io:', data);
+      if (typeof updateStreamStatusUI === 'function') {
+        updateStreamStatusUI(data.streamId, data.status);
+      } else if (typeof refreshStreamsView === 'function') {
+        refreshStreamsView();
+      }
+    });
+  }
+</script>

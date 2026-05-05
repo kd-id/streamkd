@@ -2340,6 +2340,78 @@
       displayDesktopStreams(streams);
     }
 
+    
+    // Real-Time DOM Updater
+    function updateStreamStatusUI(streamId, newStatus) {
+      // Find the row and card
+      const desktopRow = document.querySelector(`tr[data-stream-id="${streamId}"]`);
+      const mobileCard = document.querySelector(`div.bg-gray-800[data-stream-id="${streamId}"]`);
+
+      if (desktopRow) {
+        // Update badge
+        const badgeContainer = desktopRow.querySelector('td:nth-last-child(2) > div');
+        if (badgeContainer) {
+          badgeContainer.innerHTML = getStatusBadgeHTML(newStatus);
+        }
+        
+        // Update buttons
+        const actionContainer = desktopRow.querySelector('td:last-child .flex.items-center.justify-end');
+        if (actionContainer) {
+          // Remove old action button
+          const oldBtn = actionContainer.querySelector('.action-btn');
+          if (oldBtn) oldBtn.remove();
+          
+          // Insert new action button at the beginning
+          actionContainer.insertAdjacentHTML('afterbegin', getActionButtonHTML(newStatus, streamId, 'desktop'));
+          
+          // Update Edit/Delete button disabled states
+          const editDelBtns = actionContainer.querySelectorAll('button[onclick^="editStream"], button[onclick^="deleteStream"]');
+          editDelBtns.forEach(btn => {
+            if (newStatus === 'live' || newStatus === 'scheduled') {
+              btn.disabled = true;
+              btn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+              btn.disabled = false;
+              btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+          });
+        }
+      }
+
+      if (mobileCard) {
+        // Update badge
+        const badgeContainer = mobileCard.querySelector('.border-t > div:first-child');
+        if (badgeContainer) {
+          badgeContainer.innerHTML = getStatusBadgeHTML(newStatus);
+        }
+        
+        // Update buttons
+        const actionContainer = mobileCard.querySelector('.border-t > div:last-child');
+        if (actionContainer) {
+          const oldBtn = actionContainer.querySelector('.action-btn');
+          if (oldBtn) oldBtn.remove();
+          
+          actionContainer.insertAdjacentHTML('afterbegin', getActionButtonHTML(newStatus, streamId, 'mobile'));
+          
+          const editDelBtns = actionContainer.querySelectorAll('button[onclick^="editStream"], button[onclick^="deleteStream"]');
+          editDelBtns.forEach(btn => {
+            if (newStatus === 'live' || newStatus === 'scheduled') {
+              btn.disabled = true;
+              btn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+              btn.disabled = false;
+              btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+          });
+        }
+      }
+      
+      // Update global counters if possible
+      if (typeof updateStreamCountersFromAPI === 'function') {
+        updateStreamCountersFromAPI();
+      }
+    }
+
     function fetchStreams(page = 1, limit = 10, search = '') {
       currentPage = page;
       currentLimit = limit;

@@ -387,6 +387,7 @@ class Stream {
             console.error('Error clearing schedule fields:', err.message);
             return reject(err);
           }
+          if (global.io) { global.io.emit('streamStatusUpdate', { streamId: id, status: status }); }
           resolve({ id, updated: this.changes > 0 });
         }
       );

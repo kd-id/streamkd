@@ -11,6 +11,8 @@ if (!fs.existsSync(dbDir)) {
 
 require('./services/logger.js');
 const express = require('express');
+const { Server } = require("socket.io");
+
 const engine = require('ejs-mate');
 const os = require('os');
 const multer = require('multer');
@@ -5200,6 +5202,12 @@ app.delete('/api/ai/prompt-history/:id', isAuthenticated, async (req, res) => {
 });
 
 const server = app.listen(port, '0.0.0.0', async () => {
+  const io = new Server(server, { cors: { origin: "*" } });
+  global.io = io;
+
+  const io = new Server(server, { cors: { origin: "*" } });
+  streamingService.setSocketIo(io);
+
   try {
     await initializeDatabase();
   } catch (error) {
