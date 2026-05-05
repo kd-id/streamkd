@@ -79,6 +79,7 @@ const optimizeVideo = (videoPath, outputPath) => {
         '-c:a aac',
         '-b:a 128k',
         '-ar 44100',
+        '-shortest',
         '-threads 1' // Keep it low priority
       ])
       .output(outputPath)

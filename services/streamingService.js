@@ -646,6 +646,11 @@ async function checkSingleVideoCopyCompatible(videoPath) {
     const codec = (videoStream.codec_name || '').toLowerCase();
     if (codec !== 'h264') return false;
     if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
+    const audioStream = getPrimaryStream(probeData, 'audio');
+    if (audioStream) {
+      const acodec = (audioStream.codec_name || '').toLowerCase();
+      if (acodec !== 'aac') return false;
+    }
     return true;
   } catch {
     return false;
@@ -881,10 +886,9 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
         '-map', '0:v:0',
         '-map', '1:a:0',
         '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-ar', '44100',
-        '-f', 'flv',
+      '-c:a', 'copy',
+      '-bsf:a', 'aac_adtstoasc',
+      '-f', 'flv',
         '-flvflags', 'no_duration_filesize',
         rtmpUrl
       ];
@@ -1246,6 +1250,8 @@ async function buildFFmpegArgs(stream) {
       '-re',
       '-fflags', '+genpts+igndts+discardcorrupt',
       '-avoid_negative_ts', 'make_zero',
+      '-use_wallclock_as_timestamps', '1',
+      '-max_muxing_queue_size', '1024',
       '-stream_loop', loopValue,
       '-i', videoPath,
       '-c:v', 'copy',
@@ -1297,12 +1303,13 @@ async function buildFFmpegArgs(stream) {
       '-re',
       '-fflags', '+genpts+igndts+discardcorrupt',
       '-avoid_negative_ts', 'make_zero',
+      '-use_wallclock_as_timestamps', '1',
+      '-max_muxing_queue_size', '1024',
       '-stream_loop', loopValue,
       '-i', effectiveVideoPath,
       '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-ar', '44100',
+      '-c:a', 'copy',
+      '-bsf:a', 'aac_adtstoasc',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
       rtmpUrl
@@ -1324,8 +1331,10 @@ async function buildFFmpegArgs(stream) {
     '-re',
     '-fflags', '+genpts+igndts+discardcorrupt',
     '-avoid_negative_ts', 'make_zero',
-    '-stream_loop', loopValue,
-    '-i', videoPath,
+      '-use_wallclock_as_timestamps', '1',
+      '-max_muxing_queue_size', '1024',
+      '-stream_loop', loopValue,
+      '-i', videoPath,
     '-c:v', 'libx264',
     '-preset', adaptive.preset,
     '-tune', isImg ? 'stillimage' : 'zerolatency',
