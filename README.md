@@ -122,14 +122,6 @@ Redirect URI yang harus ditambahkan di Google Cloud Console:
 https://domain-anda.com/auth/youtube/callback
 ```
 
-Update cepat di VPS:
-```bash
-cd /home/www/streamkd
-bash scripts/update-vps.sh
-```
-
-Script update cepat hanya menjalankan `npm install` dan rebuild native module jika `package.json` atau `package-lock.json` berubah. Untuk perubahan source biasa, script cukup `git pull` lalu restart aplikasi.
-
 Jalankan aplikasi:
 ```bash
 npm run dev
@@ -219,6 +211,33 @@ http://IP_SERVER:PORT
 ```
 
 Contoh: `http://88.12.34.56:7575`
+
+### 6. Cara Update Source Code
+
+Masuk ke folder aplikasi di VPS:
+```bash
+cd /home/www/streamkd
+```
+
+Untuk update pertama setelah fitur fast update tersedia, jalankan:
+```bash
+git pull origin main
+bash scripts/update-vps.sh
+```
+
+Untuk update berikutnya, cukup jalankan:
+```bash
+bash scripts/update-vps.sh
+```
+
+Script update cepat akan skip `npm install` jika `package.json` dan `package-lock.json` tidak berubah. Jadi untuk perubahan source code biasa, proses update hanya `git pull` lalu restart aplikasi.
+
+Jika ingin update manual tanpa script:
+```bash
+git pull origin main
+pm2 restart streamkd --update-env
+pm2 save
+```
 
 
 ## 🔐 Reset Password
