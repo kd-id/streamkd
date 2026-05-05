@@ -65,6 +65,81 @@ async function runFfmpeg(args) {
   });
 }
 
+// --- Transcode Cache: avoid re-encoding same video on every Start ---
+const CACHE_DIR_NAME = 'transcode_cache';
+
+function getTranscodeCacheDir() {
+  const dir = path.join(path.resolve(__dirname, '..'), 'temp', CACHE_DIR_NAME);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function getTranscodeCacheKey(videoPath) {
+  // Use file path + modified time as cache key
+  try {
+    const stat = fs.statSync(videoPath);
+    const raw = videoPath + '|' + stat.size + '|' + stat.mtimeMs;
+    // Simple hash
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const chr = raw.charCodeAt(i);
+      hash = ((hash << 5) - hash) + chr;
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
+  } catch {
+    return null;
+  }
+}
+
+function getTranscodeCachePath(videoPath) {
+  const key = getTranscodeCacheKey(videoPath);
+  if (!key) return null;
+  return path.join(getTranscodeCacheDir(), `cached_${key}.mp4`);
+}
+
+function hasTranscodeCache(videoPath) {
+  const cachePath = getTranscodeCachePath(videoPath);
+  return cachePath && fs.existsSync(cachePath);
+}
+
+async function createTranscodeCache(videoPath) {
+  const cachePath = getTranscodeCachePath(videoPath);
+  if (!cachePath) return null;
+  if (fs.existsSync(cachePath)) return cachePath;
+
+  console.log(`[StreamingService] Creating transcode cache for: ${path.basename(videoPath)}`);
+  try {
+    await runFfmpeg([
+      '-y',
+      '-hide_banner',
+      '-loglevel', 'warning',
+      '-i', videoPath,
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-profile:v', 'main',
+      '-pix_fmt', 'yuv420p',
+      '-crf', '20',
+      '-maxrate', '5000k',
+      '-bufsize', '10000k',
+      '-g', '60',
+      '-r', '30',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ar', '44100',
+      '-movflags', '+faststart',
+      '-threads', '1',
+      cachePath
+    ]);
+    console.log(`[StreamingService] Transcode cache created: ${path.basename(cachePath)}`);
+    return cachePath;
+  } catch (e) {
+    console.error(`[StreamingService] Cache creation failed: ${e.message}`);
+    try { fs.unlinkSync(cachePath); } catch {}
+    return null;
+  }
+}
+
 async function renderStaticSlideshowVideo({ streamId, videoPaths, tempDir, resolution, fps, bitrate, imageDuration }) {
   const renderConcatFile = path.join(tempDir, `slideshow_render_${streamId}.txt`);
   const outputPath = path.join(tempDir, `slideshow_render_${streamId}_${resolution}_${fps}_${bitrate}.mp4`);
@@ -978,8 +1053,40 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   // --- SMART COPY + ADAPTIVE QUALITY for Playlist with Custom Audio ---
   // If all videos are already H.264/yuv420p (optimized), use -c:v copy = near-zero CPU
   // Otherwise fallback to transcode with adaptive quality based on active stream count
-  const canCopyVideo = await checkPlaylistCopyCompatible(videoPaths);
+  let canCopyVideo = await checkPlaylistCopyCompatible(videoPaths);
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+
+  // For single-video playlists, try transcode cache if not copy-compatible
+  if (!canCopyVideo && videoPaths.length === 1) {
+    const vp = videoPaths[0];
+    if (hasTranscodeCache(vp)) {
+      const cachedPath = getTranscodeCachePath(vp);
+      videoPaths[0] = cachedPath;
+      // Rewrite concat file with cached path
+      let newConcatContent = '';
+      for (let i = 0; i < 10000; i++) {
+        newConcatContent += `file '${cachedPath.replace(/\\\\/g, '/')}'
+`;
+      }
+      fs.writeFileSync(concatFile, newConcatContent);
+      canCopyVideo = true;
+      addStreamLog(stream.id, '[Cache] Playlist: using cached transcode.');
+    } else {
+      addStreamLog(stream.id, '[Cache] First-time playlist transcode — creating cache...');
+      const cached = await createTranscodeCache(vp);
+      if (cached) {
+        videoPaths[0] = cached;
+        let newConcatContent = '';
+        for (let i = 0; i < 10000; i++) {
+          newConcatContent += `file '${cached.replace(/\\\\/g, '/')}'
+`;
+        }
+        fs.writeFileSync(concatFile, newConcatContent);
+        canCopyVideo = true;
+        addStreamLog(stream.id, '[Cache] Cache created! Using copy mode.');
+      }
+    }
+  }
 
   if (canCopyVideo) {
     // COPY MODE: Video already optimized — CPU ~5% instead of 100%
@@ -1142,11 +1249,34 @@ async function buildFFmpegArgs(stream) {
   const fps = isImg ? getSlideshowFps(stream) : stream.fps || 30;
 
   // --- SMART COPY + ADAPTIVE QUALITY for Single Video (Advanced Settings) ---
-  const canCopy = !isImg && await checkSingleVideoCopyCompatible(videoPath);
+  // Check 1: Is original video copy-compatible?
+  // Check 2: Is there a cached transcode from previous stream?
+  let effectiveVideoPath = videoPath;
+  let canCopy = !isImg && await checkSingleVideoCopyCompatible(videoPath);
+
+  if (!canCopy && !isImg) {
+    // Check for transcode cache
+    if (hasTranscodeCache(videoPath)) {
+      effectiveVideoPath = getTranscodeCachePath(videoPath);
+      canCopy = true;
+      addStreamLog(stream.id, '[Cache] Using cached transcode — no re-encoding needed!');
+      console.log(`[StreamingService] Cache hit: ${path.basename(effectiveVideoPath)}`);
+    } else {
+      // Try to create cache now (blocks start but saves all future starts)
+      addStreamLog(stream.id, '[Cache] First-time transcode — creating cache for future streams...');
+      const cached = await createTranscodeCache(videoPath);
+      if (cached) {
+        effectiveVideoPath = cached;
+        canCopy = true;
+        addStreamLog(stream.id, '[Cache] Cache created! Using copy mode.');
+      }
+    }
+  }
+
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
   if (canCopy) {
-    // COPY MODE: Video already H.264/yuv420p — near-zero CPU
+    // COPY MODE: Video already H.264/yuv420p (or cached) — near-zero CPU
     console.log(`[StreamingService] Copy Mode: Single video (${activeCount} active). Skipping transcode.`);
     return [
       '-nostdin',
@@ -1156,7 +1286,7 @@ async function buildFFmpegArgs(stream) {
       '-fflags', '+genpts+igndts+discardcorrupt',
       '-avoid_negative_ts', 'make_zero',
       '-stream_loop', loopValue,
-      '-i', videoPath,
+      '-i', effectiveVideoPath,
       '-c:v', 'copy',
       '-c:a', 'aac',
       '-b:a', '128k',
