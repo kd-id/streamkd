@@ -7,7 +7,7 @@
     "start": "node app.js",
     "dev": "nodemon app.js",
     "generate-secret": "node generate-secret.js",
-    "rebuild-native": "npm rebuild sqlite3 bcrypt",
+    "rebuild-native": "node scripts/rebuild-native.js",
     "postinstall": "npm run rebuild-native"
   },
   "dependencies": {

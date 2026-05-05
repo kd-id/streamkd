@@ -292,6 +292,13 @@ rm db/*.db
 pm2 restart streamkd
 ```
 
+### SQLite GLIBC Error
+Jika muncul error seperti `GLIBC_2.38 not found` dari `node_sqlite3.node`, rebuild native module di VPS:
+```bash
+sudo apt install -y python3 make g++ build-essential
+npm run rebuild-native
+```
+
 ### Docker Troubleshooting
 
 **Tidak bisa login:**

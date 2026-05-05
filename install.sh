@@ -43,22 +43,9 @@ nvm alias default 'lts/*'
 echo "✅ Node.js $(node -v) berhasil diinstall"
 
 # ─────────────────────────────────────────
-# 4. Install pnpm
+# 4. Verify npm
 # ─────────────────────────────────────────
-echo "📦 Installing pnpm..."
-npm install -g pnpm
-
-export PNPM_HOME="$HOME/.local/share/pnpm"
-export PATH="$PNPM_HOME:$PATH"
-mkdir -p "$PNPM_HOME"
-
-# Pastikan pnpm tersedia di .bashrc
-grep -q 'PNPM_HOME' ~/.bashrc || cat >> ~/.bashrc << 'EOF'
-export PNPM_HOME="$HOME/.local/share/pnpm"
-export PATH="$PNPM_HOME:$PATH"
-EOF
-
-echo "✅ pnpm $(pnpm -v) berhasil diinstall"
+echo "📦 npm $(npm -v) siap digunakan"
 
 # ─────────────────────────────────────────
 # 5. Install build tools (wajib untuk native modules)
@@ -103,42 +90,9 @@ fi
 # 9. Install dependencies & build native modules
 # ─────────────────────────────────────────
 echo "⚙️ Installing dependencies..."
-pnpm install
-
-echo "🔨 Approving & building native modules (sqlite3, bcrypt, ffmpeg)..."
-# Buat file .pnpmfile.cjs untuk allow semua build scripts secara otomatis
-cat > "$HOME/streamkd/.pnpmfile.cjs" << 'PNPMEOF'
-function readPackage(pkg, context) {
-  return pkg;
-}
-
-module.exports = {
-  hooks: {
-    readPackage,
-  },
-};
-PNPMEOF
-
-# Approve semua build scripts yang dibutuhkan
-pnpm approve-builds --all 2>/dev/null || true
-
-# Reinstall dengan build scripts diizinkan
-pnpm install --ignore-scripts=false
-
-# Pastikan sqlite3 native binary terkompilasi
-echo "🔨 Rebuilding sqlite3 native binary..."
-cd "$HOME/streamkd/node_modules/.pnpm/sqlite3@5.1.7/node_modules/sqlite3" 2>/dev/null && \
-    npm run install --build-from-source 2>/dev/null || \
-    node-pre-gyp install --fallback-to-build 2>/dev/null || true
-cd "$HOME/streamkd"
-
-# Pastikan bcrypt native binary terkompilasi
-echo "🔨 Rebuilding bcrypt native binary..."
-cd "$HOME/streamkd/node_modules/.pnpm/bcrypt@6.0.0/node_modules/bcrypt" 2>/dev/null && \
-    npm run install --build-from-source 2>/dev/null || true
-cd "$HOME/streamkd"
-
-pnpm run generate-secret
+npm install
+npm run rebuild-native
+npm run generate-secret
 
 # ─────────────────────────────────────────
 # 10. Setup timezone
@@ -161,25 +115,24 @@ sudo ufw --force enable
 # Reload PATH secara lengkap sebelum cek & install PM2
 export NVM_DIR="$HOME/.nvm"
 source "$NVM_DIR/nvm.sh"
-export PNPM_HOME="$HOME/.local/share/pnpm"
-export PATH="$PNPM_HOME:$NVM_DIR/versions/node/$(nvm current)/bin:$PATH"
+export PATH="$NVM_DIR/versions/node/$(nvm current)/bin:$PATH"
 hash -r
 
 if command -v pm2 &> /dev/null; then
     echo "✅ PM2 sudah terinstall, skip..."
 else
     echo "🚀 Installing PM2..."
-    pnpm add -g pm2
+    npm install -g pm2
 
     # Reload PATH lagi setelah install agar pm2 langsung bisa dipakai
-    export PATH="$PNPM_HOME:$NVM_DIR/versions/node/$(nvm current)/bin:$PATH"
+    export PATH="$NVM_DIR/versions/node/$(nvm current)/bin:$PATH"
     hash -r
 fi
 
 # Verifikasi pm2 tersedia
 if ! command -v pm2 &> /dev/null; then
     echo "❌ PM2 gagal ditemukan setelah instalasi. Coba jalankan manual:"
-    echo "   export PATH=\"$PNPM_HOME:\$PATH\" && pm2 --version"
+    echo "   npm install -g pm2 && pm2 --version"
     exit 1
 fi
 
@@ -222,7 +175,7 @@ SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}' ||
 echo
 echo "🌐 URL Akses: http://$SERVER_IP:7575"
 echo "📦 Node.js: $(node -v)"
-echo "📦 pnpm: $(pnpm -v)"
+echo "📦 npm: $(npm -v)"
 echo "📦 PM2: $(pm2 --version)"
 echo
 echo "📋 Langkah selanjutnya:"

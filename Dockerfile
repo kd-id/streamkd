@@ -12,12 +12,13 @@ RUN apt-get update && apt-get install -y \
 # Set working directory di dalam container
 WORKDIR /app
 
-# Copy package.json dan package-lock.json
+# Copy package metadata dan script postinstall native module
 COPY package*.json ./
+COPY scripts/rebuild-native.js ./scripts/rebuild-native.js
 
-# Install dependency production, lalu rebuild sqlite3 dari source agar kompatibel
-RUN npm install --omit=dev \
-    && npm rebuild sqlite3 --build-from-source
+# Install dependency production. Di Linux, postinstall akan rebuild sqlite3 dari source
+# agar native binding cocok dengan versi GLIBC server/container.
+RUN npm install --omit=dev
 
 # Copy seluruh source code
 COPY . .
