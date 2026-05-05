@@ -220,12 +220,23 @@ const QUALITY_TIERS = [
 ];
 
 const YOUTUBE_COPY_ALLOWED_VIDEO_CODECS = new Set(['h264']);
-const YOUTUBE_COPY_ALLOWED_AUDIO_CODECS = new Set(['aac', 'mp3']);
+const YOUTUBE_COPY_ALLOWED_AUDIO_CODECS = new Set(['aac']);
 
+let ioInstance = null;
 let schedulerService = null;
 let syncIntervalId = null;
 let healthCheckIntervalId = null;
 let initialized = false;
+
+function broadcastStatusUpdate(streamId, status, extra = {}) {
+  if (ioInstance) {
+    ioInstance.emit('streamStatusUpdate', { streamId, status, ...extra });
+  }
+}
+
+function setSocketIo(io) {
+  ioInstance = io;
+}
 
 function setSchedulerService(service) {
   schedulerService = service;
@@ -1131,7 +1142,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   // TRANSCODE MODE: Video not compatible for copy — use adaptive quality
   const adaptive = getAdaptiveSettings(stream, activeCount);
   const transcodePreset = stream.use_advanced_settings ? adaptive.preset : adaptive.preset;
-  const audioCodec = stream.use_advanced_settings ? 'copy' : 'aac';
+  const audioCodec = isYouTubeDestination(stream) ? 'aac' : (stream.use_advanced_settings ? 'copy' : 'aac');
 
   console.log(`[StreamingService] Transcode Mode: Video+Audio playlist. ${adaptive.finalResolution} @ ${adaptive.finalBitrate}k preset=${transcodePreset}`);
 
@@ -1440,15 +1451,16 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       if (compatibilityError.code === 'UNSUPPORTED_COPY_MODE_MEDIA') {
         addStreamLog(streamId, `Copy mode unsupported (${compatibilityError.message}). Forcing Advanced Settings (Transcoding).`);
         stream.use_advanced_settings = true;
+        await Stream.update(streamId, { use_advanced_settings: true });
       } else {
         throw compatibilityError;
       }
     }
 
+    const effectiveBaseUrl = baseUrl || process.env.YOUTUBE_BASE_URL || process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:7575';
 
     if (stream.is_youtube_api) {
       const youtubeService = require('./youtubeService');
-      const effectiveBaseUrl = baseUrl || process.env.YOUTUBE_BASE_URL || process.env.APP_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:7575';
 
       addStreamLog(streamId, 'Creating YouTube broadcast...');
 
@@ -1674,6 +1686,50 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       cleanupTempFiles(streamId);
       cleanupStreamData(streamId);
       throw startupError;
+    }
+
+    if (stream.is_youtube_api) {
+      const youtubeService = require('./youtubeService');
+      let exitHandler = null;
+
+      addStreamLog(streamId, 'Menunggu YouTube Studio menerima data encoder...');
+
+      try {
+        const processExitPromise = new Promise((_, reject) => {
+          exitHandler = (code, signal) => {
+            reject(new Error(`FFmpeg berhenti sebelum YouTube menerima data: code=${code}, signal=${signal}`));
+          };
+          ffmpegProcess.once('exit', exitHandler);
+        });
+
+        const ingestStatus = await Promise.race([
+          youtubeService.waitForYouTubeStreamActive(streamId, effectiveBaseUrl),
+          processExitPromise
+        ]);
+
+        if (exitHandler) {
+          ffmpegProcess.off('exit', exitHandler);
+          exitHandler = null;
+        }
+
+        addStreamLog(streamId, `YouTube ingest aktif: streamStatus=${ingestStatus.streamStatus}${ingestStatus.healthStatus ? `, health=${ingestStatus.healthStatus}` : ''}`);
+
+        const transitionResult = await youtubeService.transitionYouTubeBroadcastToLive(streamId, effectiveBaseUrl);
+        addStreamLog(streamId, `YouTube broadcast live: ${transitionResult.lifecycleStatus || 'live'}`);
+      } catch (youtubeError) {
+        if (exitHandler) {
+          ffmpegProcess.off('exit', exitHandler);
+        }
+
+        addStreamLog(streamId, `YouTube ingest failed: ${youtubeError.message}`);
+        manuallyStoppingStreams.add(streamId);
+        await killFFmpegProcess(streamId, activeStreams.get(streamId));
+        manuallyStoppingStreams.delete(streamId);
+        activeStreams.delete(streamId);
+        cleanupTempFiles(streamId);
+        cleanupStreamData(streamId);
+        throw youtubeError;
+      }
     }
 
     if (!isRetry) {
@@ -2025,6 +2081,7 @@ process.on('SIGINT', async () => {
 });
 
 module.exports = {
+  setSocketIo,
   startStream,
   stopStream,
   validateCopyModeCompatibilityForInput,

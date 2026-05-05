@@ -3955,7 +3955,18 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
     if (!title) {
       return res.status(400).json({ success: false, error: 'Stream title is required' });
     }
-    
+
+    let mediaProfileSource = await Video.findById(videoId);
+    if (!mediaProfileSource) {
+      const playlist = await Playlist.findByIdWithVideos(videoId);
+      mediaProfileSource = playlist?.videos?.find(item => item.resolution || item.fps || item.bitrate) || null;
+    }
+
+    const sourceResolution = mediaProfileSource?.resolution || '1280x720';
+    const parsedSourceFps = parseFloat(mediaProfileSource?.fps);
+    const sourceFps = Number.isFinite(parsedSourceFps) && parsedSourceFps > 0 ? Math.round(parsedSourceFps) : 30;
+    const sourceBitrate = parseInt(mediaProfileSource?.bitrate, 10) || 4000;
+     
     let localThumbnailPath = null;
     if (req.file) {
       try {
@@ -3975,9 +3986,9 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       stream_key: '',
       platform: 'YouTube',
       platform_icon: 'ti-brand-youtube',
-      bitrate: 4000,
-      resolution: '1920x1080',
-      fps: 30,
+      bitrate: sourceBitrate,
+      resolution: sourceResolution,
+      fps: sourceFps,
       orientation: 'horizontal',
       loop_video: loopVideo === 'true' || loopVideo === true,
       use_advanced_settings: false,
@@ -5204,8 +5215,6 @@ app.delete('/api/ai/prompt-history/:id', isAuthenticated, async (req, res) => {
 const server = app.listen(port, '0.0.0.0', async () => {
   const io = new Server(server, { cors: { origin: "*" } });
   global.io = io;
-
-  const io = new Server(server, { cors: { origin: "*" } });
   streamingService.setSocketIo(io);
 
   try {

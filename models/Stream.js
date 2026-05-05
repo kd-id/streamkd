@@ -253,6 +253,9 @@ class Stream {
       if (key === 'loop_video' && typeof value === 'boolean') {
         fields.push(`${key} = ?`);
         values.push(value ? 1 : 0);
+      } else if (key === 'use_advanced_settings' && typeof value === 'boolean') {
+        fields.push(`${key} = ?`);
+        values.push(value ? 1 : 0);
       } else if (key === 'youtube_monetization' && typeof value === 'boolean') {
         fields.push(`${key} = ?`);
         values.push(value ? 1 : 0);
