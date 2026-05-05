@@ -102,17 +102,65 @@
                                     <select onchange="updateField('<%= id %>', this.value)" class="w-full bg-dark-700/50 border border-gray-600/30 rounded-lg px-2 py-2 text-[10px] text-white focus:ring-1 focus:ring-primary appearance-none custom-scrollbar">
                                         <option value="" class="bg-dark-800">Choose...</option>
                                         <% if(id === 'artstyle') { %>
+                                            <optgroup label="Photorealism" class="bg-dark-800 text-gray-500 text-[9px]">
+                                                <option value="Photorealistic real photo, natural skin texture, authentic details, lifelike proportions" class="bg-dark-800 text-white">Real Photo</option>
+                                                <option value="Documentary photography, candid real-life moment, natural environment, unposed" class="bg-dark-800 text-white">Documentary Real</option>
+                                                <option value="Editorial commercial photography, premium realistic product shot, clean professional finish" class="bg-dark-800 text-white">Editorial Real</option>
+                                                <option value="Raw smartphone photography, real-world lighting, casual authentic snapshot" class="bg-dark-800 text-white">Phone Camera Real</option>
+                                            </optgroup>
+                                            <optgroup label="Cinematic & 3D" class="bg-dark-800 text-gray-500 text-[9px]">
                                             <option value="Unreal Engine 5 Render, 8k, hyper-realistic" class="bg-dark-800 text-white">UE5 Viral</option>
                                             <option value="Studio Ghibli style, hand-drawn, whimsical" class="bg-dark-800 text-white">Studio Ghibli</option>
                                             <option value="Disney Pixar 3D style, cute, expressive" class="bg-dark-800 text-white">Pixar Style</option>
                                             <option value="Retro 80s Synthwave, neon pink and purple" class="bg-dark-800 text-white">Synthwave</option>
                                             <option value="Dark Academia, oil painting, dramatic" class="bg-dark-800 text-white">Dark Academia</option>
                                             <option value="Cyberpunk 2077 aesthetic, gritty, high-tech" class="bg-dark-800 text-white">Cyberpunk</option>
+                                            </optgroup>
                                         <% } else if(id === 'lighting') { %>
                                             <option value="Cinematic rim lighting, high contrast" class="bg-dark-800 text-white">Cinematic Rim</option>
                                             <option value="Volumetric fog, god rays, atmospheric" class="bg-dark-800 text-white">God Rays</option>
                                             <option value="Soft bokeh, golden hour sunlight" class="bg-dark-800 text-white">Golden Hour</option>
                                             <option value="Harsh neon flickering lights" class="bg-dark-800 text-white">Neon Flicker</option>
+                                            <option value="Natural daylight, soft shadows, realistic exposure" class="bg-dark-800 text-white">Natural Daylight</option>
+                                            <option value="Low-key studio lighting, deep shadows, dramatic highlights" class="bg-dark-800 text-white">Low Key Studio</option>
+                                            <option value="High-key studio lighting, bright clean whites, soft even illumination" class="bg-dark-800 text-white">High Key Studio</option>
+                                            <option value="Practical indoor lighting, warm lamps, believable room ambience" class="bg-dark-800 text-white">Indoor Practical</option>
+                                        <% } else if(id === 'mood') { %>
+                                            <option value="Calm, cozy, peaceful, relaxing atmosphere" class="bg-dark-800 text-white">Cozy Calm</option>
+                                            <option value="Mysterious, cinematic, suspenseful, shadowy mood" class="bg-dark-800 text-white">Mysterious</option>
+                                            <option value="Epic, powerful, heroic, awe-inspiring energy" class="bg-dark-800 text-white">Epic Heroic</option>
+                                            <option value="Romantic, soft, intimate, dreamy feeling" class="bg-dark-800 text-white">Romantic</option>
+                                            <option value="Dark, gritty, intense, serious atmosphere" class="bg-dark-800 text-white">Dark Gritty</option>
+                                            <option value="Joyful, bright, playful, optimistic mood" class="bg-dark-800 text-white">Joyful</option>
+                                            <option value="Lonely, melancholic, quiet, reflective tone" class="bg-dark-800 text-white">Melancholic</option>
+                                            <option value="Luxury, elegant, premium, refined atmosphere" class="bg-dark-800 text-white">Luxury</option>
+                                        <% } else if(id === 'colors') { %>
+                                            <option value="Natural realistic colors, balanced contrast, true-to-life tones" class="bg-dark-800 text-white">Natural Real</option>
+                                            <option value="Warm amber and soft brown palette, cozy highlights" class="bg-dark-800 text-white">Warm Amber</option>
+                                            <option value="Cool blue and teal palette, clean modern contrast" class="bg-dark-800 text-white">Cool Teal</option>
+                                            <option value="Pastel color palette, soft low saturation, airy look" class="bg-dark-800 text-white">Pastel Soft</option>
+                                            <option value="Bold neon palette, electric magenta, cyan, violet accents" class="bg-dark-800 text-white">Neon Pop</option>
+                                            <option value="Monochrome black and white, rich contrast, timeless look" class="bg-dark-800 text-white">Black White</option>
+                                            <option value="Earthy green, terracotta, muted natural palette" class="bg-dark-800 text-white">Earth Tone</option>
+                                            <option value="High contrast complementary colors, striking visual separation" class="bg-dark-800 text-white">High Contrast</option>
+                                        <% } else if(id === 'camera') { %>
+                                            <option value="Close-up portrait shot, shallow depth of field, eye-level angle" class="bg-dark-800 text-white">Close Portrait</option>
+                                            <option value="Wide establishing shot, full environment visible, cinematic framing" class="bg-dark-800 text-white">Wide Shot</option>
+                                            <option value="Low angle shot, powerful perspective, dramatic scale" class="bg-dark-800 text-white">Low Angle</option>
+                                            <option value="Top-down overhead shot, clean composition, graphic layout" class="bg-dark-800 text-white">Top Down</option>
+                                            <option value="Macro lens photography, extreme detail, creamy background blur" class="bg-dark-800 text-white">Macro Lens</option>
+                                            <option value="35mm lens, natural perspective, realistic documentary framing" class="bg-dark-800 text-white">35mm Real</option>
+                                            <option value="85mm portrait lens, compressed background, soft bokeh" class="bg-dark-800 text-white">85mm Portrait</option>
+                                            <option value="Handheld camera feel, subtle motion, candid realistic framing" class="bg-dark-800 text-white">Handheld Real</option>
+                                        <% } else if(id === 'technical') { %>
+                                            <option value="Ultra detailed, sharp focus, clean edges, high dynamic range" class="bg-dark-800 text-white">Ultra Detail</option>
+                                            <option value="4k resolution, realistic texture, balanced exposure, no artifacts" class="bg-dark-800 text-white">4K Clean</option>
+                                            <option value="Depth of field, f/1.8 aperture, creamy bokeh, subject isolation" class="bg-dark-800 text-white">DOF Bokeh</option>
+                                            <option value="Shot on full-frame DSLR, ISO 100, natural grain, professional color grading" class="bg-dark-800 text-white">DSLR Pro</option>
+                                            <option value="Cinematic color grading, film grain, anamorphic lens flare, 16:9 composition" class="bg-dark-800 text-white">Cinematic Tech</option>
+                                            <option value="Product photography setup, sharp reflections, clean background, studio quality" class="bg-dark-800 text-white">Product Setup</option>
+                                            <option value="Long exposure effect, smooth motion trails, stable tripod composition" class="bg-dark-800 text-white">Long Exposure</option>
+                                            <option value="Negative prompt: low quality, blurry, distorted anatomy, extra fingers, watermark, text artifacts" class="bg-dark-800 text-white">Clean Negative</option>
                                         <% } %>
                                     </select>
                                     <input type="text" id="<%= id %>" class="w-full bg-transparent border-b border-gray-700 text-[10px] text-white focus:border-primary outline-none py-1 transition-colors" placeholder="Type here...">
