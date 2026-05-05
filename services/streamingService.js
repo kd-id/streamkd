@@ -746,7 +746,12 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   const normalFps = stream.fps || 30;
   const bitrate = isSlideshow ? getSlideshowBitrate(stream) : normalBitrate;
   const fps = isSlideshow ? getSlideshowFps(stream) : normalFps;
-  const transitionType = playlist.transition_type || 'none';
+  const activeCountForTransition = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+  let transitionType = playlist.transition_type || 'none';
+  if (isSlideshow && transitionType !== 'none' && activeCountForTransition >= 1) {
+    console.log('[Adaptive] Disabling transitions for slideshow to save CPU (Copy Mode forced).');
+    transitionType = 'none';
+  }
   const transitionDuration = parseFloat(playlist.transition_duration) || 1.0;
   const imageDuration = 10; // Total duration per image
 
