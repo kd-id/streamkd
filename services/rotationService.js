@@ -1,12 +1,13 @@
 const Rotation = require('../models/Rotation');
 const Stream = require('../models/Stream');
 const User = require('../models/User');
+const Video = require('../models/Video');
 const streamingService = require('./streamingService');
 const { google } = require('googleapis');
 const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
-const { syncBroadcastMonetization } = require('./youtubeService');
+const { syncBroadcastMonetization, mapToYoutubeResolution, mapToYoutubeFPS } = require('./youtubeService');
 
 function getRedirectUri(user) {
   if (user && user.youtube_redirect_uri) {
@@ -263,12 +264,28 @@ async function startRotationStream(rotation, item) {
     if (item.video_id && item.video_id.startsWith('playlist:')) {
       actualVideoId = item.video_id.substring(9);
     }
+    const media = actualVideoId ? await Video.findById(actualVideoId) : null;
+    const mediaBitrate = parseInt(media?.bitrate, 10) || 2500;
+    const mediaResolution = media?.resolution || '1280x720';
+    const mediaFps = parseFloat(media?.fps) || 30;
 
-    await streamingService.validateCopyModeCompatibilityForInput({
-      videoId: actualVideoId,
-      useAdvancedSettings: false,
-      isYouTubeApi: true
-    });
+    let useAdvancedSettings = false;
+    try {
+      await streamingService.validateCopyModeCompatibilityForInput({
+        videoId: actualVideoId,
+        useAdvancedSettings: false,
+        isYouTubeApi: true,
+        resolution: mediaResolution,
+        bitrate: mediaBitrate,
+        fps: mediaFps
+      });
+    } catch (compatibilityError) {
+      if (compatibilityError.code !== 'UNSUPPORTED_COPY_MODE_MEDIA') {
+        throw compatibilityError;
+      }
+      useAdvancedSettings = true;
+      console.warn(`[RotationService] Copy mode unsupported for ${item.title}. Using transcoding: ${compatibilityError.message}`);
+    }
 
     const user = await User.findById(rotation.user_id);
     if (!user) {
@@ -351,9 +368,9 @@ async function startRotationStream(rotation, item) {
           title: `Stream for ${item.title}`
         },
         cdn: {
-          frameRate: '30fps',
+          frameRate: mapToYoutubeFPS(mediaFps),
           ingestionType: 'rtmp',
-          resolution: '1080p'
+          resolution: mapToYoutubeResolution(mediaResolution)
         }
       }
     });
@@ -414,8 +431,11 @@ async function startRotationStream(rotation, item) {
       stream_key: streamKey,
       platform: 'YouTube',
       platform_icon: 'brand-youtube',
+      bitrate: mediaBitrate,
+      resolution: mediaResolution,
+      fps: Math.round(mediaFps),
       loop_video: true,
-      use_advanced_settings: false,
+      use_advanced_settings: useAdvancedSettings,
       status: 'scheduled',
       user_id: rotation.user_id,
       youtube_broadcast_id: broadcast.id,

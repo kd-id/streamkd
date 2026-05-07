@@ -408,6 +408,74 @@ function getFrameRateLabel(videoStream) {
   return videoStream && videoStream.avg_frame_rate ? videoStream.avg_frame_rate : 'unknown fps';
 }
 
+function parseFrameRate(frameRate) {
+  if (!frameRate) return null;
+  const value = frameRate.toString();
+  if (value.includes('/')) {
+    const [numerator, denominator] = value.split('/').map(Number);
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+      return numerator / denominator;
+    }
+  }
+
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseResolution(resolution) {
+  const match = (resolution || '').toString().match(/^(\d+)\s*x\s*(\d+)$/i);
+  if (!match) return null;
+  return {
+    width: parseInt(match[1], 10),
+    height: parseInt(match[2], 10)
+  };
+}
+
+function getProbeVideoBitrateKbps(probeData, videoStream) {
+  const rawBitrate = videoStream?.bit_rate || probeData?.format?.bit_rate;
+  const parsed = parseInt(rawBitrate, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed / 1000) : null;
+}
+
+function validateYouTubeTargetProfile(probeData, stream, label) {
+  if (!stream || !isYouTubeDestination(stream)) {
+    return null;
+  }
+
+  const videoStream = getPrimaryStream(probeData, 'video');
+  if (!videoStream) {
+    return null;
+  }
+
+  const mismatches = [];
+  const targetResolution = parseResolution(stream.resolution || '1280x720');
+  if (targetResolution && (videoStream.width !== targetResolution.width || videoStream.height !== targetResolution.height)) {
+    mismatches.push(`resolusi file ${videoStream.width}x${videoStream.height}, target stream ${targetResolution.width}x${targetResolution.height}`);
+  }
+
+  const targetFps = parseFrameRate(stream.fps || 30);
+  const actualFps = parseFrameRate(videoStream.avg_frame_rate || videoStream.r_frame_rate);
+  if (targetFps && actualFps && Math.abs(actualFps - targetFps) > 1) {
+    mismatches.push(`FPS file ${actualFps.toFixed(2)}, target stream ${targetFps}`);
+  }
+
+  const targetBitrate = parseInt(stream.bitrate, 10) || null;
+  const actualBitrate = getProbeVideoBitrateKbps(probeData, videoStream);
+  if (targetBitrate && actualBitrate) {
+    const lowerBound = targetBitrate * 0.75;
+    const upperBound = targetBitrate * 1.35;
+    if (actualBitrate < lowerBound || actualBitrate > upperBound) {
+      mismatches.push(`bitrate video file ${actualBitrate}kbps, target stream ${targetBitrate}kbps`);
+    }
+  }
+
+  if (mismatches.length === 0) {
+    return null;
+  }
+
+  return `${label} tidak cocok untuk YouTube copy mode: ${mismatches.join('; ')}.`;
+}
+
 function buildCopyModeCompatibilityError(label, detail) {
   return `${label} tidak kompatibel dengan YouTube: ${detail}.`;
 }
@@ -636,7 +704,10 @@ async function validateCopyModeCompatibility(stream) {
     videoId: stream.video_id,
     useAdvancedSettings: stream.use_advanced_settings,
     isYouTubeApi: stream.is_youtube_api,
-    rtmpUrl: stream.rtmp_url
+    rtmpUrl: stream.rtmp_url,
+    resolution: stream.resolution,
+    bitrate: stream.bitrate,
+    fps: stream.fps
   });
 }
 
@@ -644,9 +715,20 @@ async function validateCopyModeCompatibilityForInput({
   videoId,
   useAdvancedSettings = false,
   isYouTubeApi = false,
-  rtmpUrl = ''
+  rtmpUrl = '',
+  resolution = null,
+  bitrate = null,
+  fps = null
 }) {
-  if (useAdvancedSettings || !isYouTubeDestination({ is_youtube_api: isYouTubeApi, rtmp_url: rtmpUrl })) {
+  const targetStream = {
+    is_youtube_api: isYouTubeApi,
+    rtmp_url: rtmpUrl,
+    resolution,
+    bitrate,
+    fps
+  };
+
+  if (useAdvancedSettings || !isYouTubeDestination(targetStream)) {
     return;
   }
 
@@ -684,6 +766,11 @@ async function validateCopyModeCompatibilityForInput({
       }
 
       if (!isImg) {
+        const profileError = validateYouTubeTargetProfile(probeData, targetStream, label);
+        if (profileError) {
+          throw createUnsupportedCopyModeError(profileError);
+        }
+
         const maxKeyframeInterval = await getMaxKeyframeIntervalSeconds(resolvePublicFilePath(video.filepath));
         if (maxKeyframeInterval > 2.2) {
           throw createUnsupportedCopyModeError(
@@ -724,8 +811,9 @@ async function validateCopyModeCompatibilityForInput({
 
   const isImg = isImageFile(video.filepath);
   const videoPath = resolvePublicFilePath(video.filepath);
+  const probeData = await runFFprobe(videoPath);
   const compatibilityError = validateYouTubeCopyVideoProbe(
-    await runFFprobe(videoPath),
+    probeData,
     buildMediaLabel(video, 0, 'Video'),
     isImg
   );
@@ -735,6 +823,11 @@ async function validateCopyModeCompatibilityForInput({
   }
 
   if (!isImg) {
+    const profileError = validateYouTubeTargetProfile(probeData, targetStream, buildMediaLabel(video, 0, 'Video'));
+    if (profileError) {
+      throw createUnsupportedCopyModeError(profileError);
+    }
+
     const maxKeyframeInterval = await getMaxKeyframeIntervalSeconds(videoPath);
     if (maxKeyframeInterval > 2.2) {
       throw createUnsupportedCopyModeError(
@@ -747,7 +840,7 @@ async function validateCopyModeCompatibilityForInput({
   }
 }
 
-async function checkPlaylistCopyCompatible(videoPaths) {
+async function checkPlaylistCopyCompatible(videoPaths, stream = null) {
   try {
     let referenceStream = null;
     for (const vp of videoPaths) {
@@ -759,6 +852,7 @@ async function checkPlaylistCopyCompatible(videoPaths) {
       if (codec !== 'h264') return false;
       if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
       if (!await isYouTubeKeyframeIntervalCompatible(vp)) return false;
+      if (validateYouTubeTargetProfile(probeData, stream, path.basename(vp))) return false;
 
       // Check consistency across playlist items
       if (!referenceStream) {
@@ -774,7 +868,7 @@ async function checkPlaylistCopyCompatible(videoPaths) {
   }
 }
 
-async function checkSingleVideoCopyCompatible(videoPath) {
+async function checkSingleVideoCopyCompatible(videoPath, stream = null) {
   try {
     const probeData = await runFFprobe(videoPath);
     const videoStream = getPrimaryStream(probeData, 'video');
@@ -783,6 +877,7 @@ async function checkSingleVideoCopyCompatible(videoPath) {
     if (codec !== 'h264') return false;
     if (!isSupportedYouTubePixelFormat(videoStream.pix_fmt)) return false;
     if (!await isYouTubeKeyframeIntervalCompatible(videoPath)) return false;
+    if (validateYouTubeTargetProfile(probeData, stream, path.basename(videoPath))) return false;
     const audioStream = getPrimaryStream(probeData, 'audio');
     if (audioStream) {
       const acodec = (audioStream.codec_name || '').toLowerCase();
@@ -1113,7 +1208,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
 
     // Adaptive Quality for Playlist (no custom audio, advanced settings on)
     // First check if copy mode is possible to avoid unnecessary transcoding
-    const canCopyNoAudio = await checkPlaylistCopyCompatible(videoPaths);
+    const canCopyNoAudio = await checkPlaylistCopyCompatible(videoPaths, stream);
     const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
     if (canCopyNoAudio && !shouldForceYouTubeTranscode(stream)) {
@@ -1200,7 +1295,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   // --- SMART COPY + ADAPTIVE QUALITY for Playlist with Custom Audio ---
   // If all videos are already H.264/yuv420p (optimized), use -c:v copy = near-zero CPU
   // Otherwise fallback to transcode with adaptive quality based on active stream count
-  let canCopyVideo = !shouldForceYouTubeTranscode(stream) && await checkPlaylistCopyCompatible(videoPaths);
+  let canCopyVideo = !shouldForceYouTubeTranscode(stream) && await checkPlaylistCopyCompatible(videoPaths, stream);
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
 
   // For single-video playlists, try transcode cache if not copy-compatible
@@ -1406,7 +1501,7 @@ async function buildFFmpegArgs(stream) {
   // Check 1: Is original video copy-compatible?
   // Check 2: Is there a cached transcode from previous stream?
   let effectiveVideoPath = videoPath;
-  let canCopy = !isImg && !shouldForceYouTubeTranscode(stream) && await checkSingleVideoCopyCompatible(videoPath);
+  let canCopy = !isImg && !shouldForceYouTubeTranscode(stream) && await checkSingleVideoCopyCompatible(videoPath, stream);
 
   if (!canCopy && !isImg && !shouldForceYouTubeTranscode(stream)) {
     // Check for transcode cache

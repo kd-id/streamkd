@@ -158,6 +158,37 @@ function isImageFile(filepath) {
   return ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
 }
 
+function probeVideoMetadata(filePath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) return reject(err);
+
+      const videoStream = metadata.streams.find(stream => stream.codec_type === 'video');
+      const resolution = videoStream ? `${videoStream.width}x${videoStream.height}` : '';
+      const bitrateSource = videoStream?.bit_rate || metadata.format?.bit_rate;
+      const bitrate = bitrateSource ? Math.round(parseInt(bitrateSource, 10) / 1000) : null;
+      let fps = null;
+
+      if (videoStream && videoStream.avg_frame_rate) {
+        const fpsRatio = videoStream.avg_frame_rate.split('/');
+        if (fpsRatio.length === 2 && parseInt(fpsRatio[1], 10) !== 0) {
+          fps = Math.round((parseInt(fpsRatio[0], 10) / parseInt(fpsRatio[1], 10)) * 100) / 100;
+        } else {
+          fps = parseInt(fpsRatio[0], 10) || null;
+        }
+      }
+
+      resolve({
+        duration: metadata.format?.duration || 0,
+        format: metadata.format?.format_name || '',
+        resolution,
+        bitrate,
+        fps
+      });
+    });
+  });
+}
+
 app.use(async (req, res, next) => {
   if (req.session && req.session.userId) {
     try {
@@ -2358,18 +2389,22 @@ app.post('/api/videos/:id/optimize', isAuthenticated, async (req, res) => {
     videoProcessor.optimizeVideo(inputPath, outputPath)
       .then(async () => {
         const stats = fs.statSync(outputPath);
+        const optimizedMetadata = await probeVideoMetadata(outputPath).catch(error => {
+          console.warn(`[Optimization] Unable to probe optimized output metadata: ${error.message}`);
+          return {};
+        });
         const optimizedVideo = await Video.create({
           user_id: video.user_id,
           title: `[Optimized] ${video.title}`,
           filepath: outputRelPath,
           thumbnail_path: video.thumbnail_path,
           file_size: stats.size,
-          duration: video.duration,
+          duration: optimizedMetadata.duration || video.duration,
           folder_id: video.folder_id,
           format: 'mp4',
-          resolution: optimizedProfile.resolution,
-          bitrate: optimizedProfile.bitrate,
-          fps: optimizedProfile.fps
+          resolution: optimizedMetadata.resolution || optimizedProfile.resolution,
+          bitrate: optimizedMetadata.bitrate || optimizedProfile.bitrate,
+          fps: optimizedMetadata.fps || optimizedProfile.fps
         });
         const existingJob = optimizationJobs.get(jobId) || {};
         optimizationJobs.set(jobId, {
