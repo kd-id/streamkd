@@ -113,6 +113,7 @@ function createTables() {
         is_shuffle BOOLEAN DEFAULT 0,
         transition_type TEXT DEFAULT 'none',
         transition_duration REAL DEFAULT 1.0,
+        spectrum_type TEXT DEFAULT 'off',
         user_id TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -160,6 +161,12 @@ function createTables() {
       db.run(`ALTER TABLE playlists ADD COLUMN transition_duration REAL DEFAULT 1.0`, (err) => {
         if (err && !err.message.includes('duplicate column name')) {
           console.error('Error adding transition_duration column:', err.message);
+        }
+      });
+
+      db.run(`ALTER TABLE playlists ADD COLUMN spectrum_type TEXT DEFAULT 'off'`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding spectrum_type column:', err.message);
         }
       });
 

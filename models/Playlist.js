@@ -96,7 +96,7 @@ class Playlist {
     const playlistId = uuidv4();
     return new Promise((resolve, reject) => {
       db.run(
-        'INSERT INTO playlists (id, name, description, is_shuffle, transition_type, transition_duration, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO playlists (id, name, description, is_shuffle, transition_type, transition_duration, spectrum_type, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [
           playlistId,
           playlistData.name,
@@ -104,6 +104,7 @@ class Playlist {
           playlistData.is_shuffle || 0,
           playlistData.transition_type || 'none',
           playlistData.transition_duration || 1.0,
+          playlistData.spectrum_type || 'off',
           playlistData.user_id
         ],
         function (err) {

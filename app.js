@@ -159,6 +159,45 @@ function isImageFile(filepath) {
   return ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
 }
 
+const PLAYLIST_SPECTRUM_TYPES = new Set(['off', 'minimal', 'wave', 'bars']);
+
+function normalizePlaylistSpectrumType(value) {
+  const normalized = (value || 'off').toString().toLowerCase();
+  return PLAYLIST_SPECTRUM_TYPES.has(normalized) ? normalized : 'off';
+}
+
+async function resolvePlaylistSpectrumType({ requestedType, videoIds, audioIds, existingPlaylist, userId }) {
+  const spectrumType = normalizePlaylistSpectrumType(requestedType);
+  if (spectrumType === 'off') {
+    return 'off';
+  }
+
+  const hasAudio = Array.isArray(audioIds)
+    ? audioIds.length > 0
+    : (existingPlaylist?.audios || []).length > 0;
+  if (!hasAudio) {
+    return 'off';
+  }
+
+  const selectedVideos = [];
+  if (Array.isArray(videoIds)) {
+    for (const videoId of videoIds) {
+      const video = await Video.findById(videoId);
+      if (video && video.user_id === userId) {
+        selectedVideos.push(video);
+      }
+    }
+  } else {
+    selectedVideos.push(...(existingPlaylist?.videos || []));
+  }
+
+  if (selectedVideos.length === 0 || selectedVideos.some(video => !isImageFile(video.filepath))) {
+    return 'off';
+  }
+
+  return spectrumType;
+}
+
 function probeVideoMetadata(filePath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
@@ -4631,10 +4670,20 @@ app.post('/api/playlists', isAuthenticated, [
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
+    const spectrumType = await resolvePlaylistSpectrumType({
+      requestedType: req.body.spectrum_type,
+      videoIds: req.body.videos,
+      audioIds: req.body.audios,
+      userId: req.session.userId
+    });
+
     const playlistData = {
       name: req.body.name,
       description: req.body.description || null,
       is_shuffle: req.body.shuffle === 'true' || req.body.shuffle === true,
+      transition_type: req.body.transition_type || 'none',
+      transition_duration: parseFloat(req.body.transition_duration) || 1.0,
+      spectrum_type: spectrumType,
       user_id: req.session.userId
     };
 
@@ -4695,10 +4744,22 @@ app.put('/api/playlists/:id', isAuthenticated, [
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
 
+    const existingPlaylist = await Playlist.findByIdWithVideos(req.params.id);
+    const spectrumType = await resolvePlaylistSpectrumType({
+      requestedType: req.body.spectrum_type,
+      videoIds: req.body.videos,
+      audioIds: req.body.audios,
+      existingPlaylist,
+      userId: req.session.userId
+    });
+
     const updateData = {
       name: req.body.name,
       description: req.body.description || null,
-      is_shuffle: req.body.shuffle === 'true' || req.body.shuffle === true
+      is_shuffle: req.body.shuffle === 'true' || req.body.shuffle === true,
+      transition_type: req.body.transition_type || 'none',
+      transition_duration: parseFloat(req.body.transition_duration) || 1.0,
+      spectrum_type: spectrumType
     };
 
     const updatedPlaylist = await Playlist.update(req.params.id, updateData);

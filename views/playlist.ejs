@@ -39,6 +39,7 @@
       const displayThumbnails = thumbnails.slice(0, 4);
       const audioCount = playlist.audio_count || 0;
       const imageCount = playlist.image_count || 0;
+      const spectrumType = playlist.spectrum_type || 'off';
     %>
       <div class="bg-gray-800 rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow playlist-card flex flex-col"
            data-playlist-id="<%= playlist.id %>"
@@ -89,6 +90,11 @@
             <span class="flex items-center gap-1">
               <i class="ti ti-<%= (playlist.shuffle || playlist.is_shuffle) ? 'arrows-shuffle' : 'list-numbers' %> text-sm"></i>
             </span>
+            <% if (spectrumType !== 'off') { %>
+            <span class="flex items-center gap-1 text-blue-300" title="Audio spectrum">
+              <i class="ti ti-wave-sine text-sm"></i>
+            </span>
+            <% } %>
           </div>
           <div class="flex items-center gap-1.5">
             <button class="p-1 hover:bg-dark-700 rounded transition-colors" onclick="viewPlaylist('<%= playlist.id %>')" title="View">
@@ -136,7 +142,7 @@
         <form id="playlistForm" class="space-y-6">
           <input type="hidden" id="playlistId" name="playlistId">
 
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label for="playlistName" class="block text-sm font-medium mb-2">Playlist Name</label>
               <input type="text" id="playlistName" name="name" required placeholder="Enter playlist name..."
@@ -179,6 +185,19 @@
               <label for="playlistTransitionDuration" class="block text-sm font-medium mb-2">Duration (Sec)</label>
               <input type="number" id="playlistTransitionDuration" name="transition_duration" value="1.0" step="0.1" min="0.1" max="5"
                 class="w-full bg-dark-700 text-white px-4 py-2.5 border border-gray-600 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary">
+            </div>
+            <div>
+              <label for="playlistSpectrumType" class="text-sm font-medium mb-2 flex items-center gap-2">
+                Audio Spectrum
+                <span id="spectrumCpuBadge" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-yellow-600/20 text-yellow-300 border border-yellow-600/30">Higher CPU</span>
+              </label>
+              <select id="playlistSpectrumType" name="spectrum_type"
+                class="w-full bg-dark-700 border border-gray-600 text-white px-4 py-2.5 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                <option value="off">Off</option>
+                <option value="minimal">Minimal</option>
+                <option value="wave">Wave</option>
+                <option value="bars">Bars</option>
+              </select>
             </div>
           </div>
           <div>
@@ -426,6 +445,7 @@
             <span id="viewAudioCount" class="flex items-center gap-1"><i class="ti ti-music"></i> 0 audio</span>
             <span id="viewPlaybackMode" class="flex items-center gap-1"><i class="ti ti-list-numbers"></i> Sequential</span>
             <span id="viewTransition" class="flex items-center gap-1"><i class="ti ti-transform"></i> No Transition</span>
+            <span id="viewSpectrum" class="flex items-center gap-1"><i class="ti ti-wave-sine"></i> Spectrum Off</span>
           </div>
         </div>
 
@@ -482,6 +502,49 @@ function getSelectedVideoItems() {
 
 function getSelectedImageItems() {
   return selectedVideos.filter(isImageItem);
+}
+
+function isSpectrumTypeEnabled(value) {
+  return ['minimal', 'wave', 'bars'].includes(value);
+}
+
+function getSpectrumLabel(value) {
+  const labels = {
+    minimal: 'Minimal',
+    wave: 'Wave',
+    bars: 'Bars'
+  };
+  return labels[value] || 'Off';
+}
+
+function updateSpectrumControls() {
+  const spectrumSelect = document.getElementById('playlistSpectrumType');
+  const transitionSelect = document.getElementById('playlistTransitionType');
+  const transitionDuration = document.getElementById('playlistTransitionDuration');
+  const cpuBadge = document.getElementById('spectrumCpuBadge');
+  if (!spectrumSelect || !transitionSelect || !transitionDuration) return;
+
+  const isImageOnlySlideshow = selectedVideos.length > 0 && getSelectedVideoItems().length === 0;
+  const canUseSpectrum = isImageOnlySlideshow && selectedAudios.length > 0;
+
+  if (!canUseSpectrum) {
+    spectrumSelect.value = 'off';
+    spectrumSelect.disabled = true;
+  } else {
+    spectrumSelect.disabled = false;
+  }
+
+  const spectrumEnabled = canUseSpectrum && isSpectrumTypeEnabled(spectrumSelect.value);
+  if (cpuBadge) cpuBadge.classList.toggle('hidden', !spectrumEnabled);
+
+  transitionSelect.disabled = spectrumEnabled;
+  transitionDuration.disabled = spectrumEnabled;
+  transitionSelect.classList.toggle('opacity-50', spectrumEnabled);
+  transitionDuration.classList.toggle('opacity-50', spectrumEnabled);
+
+  if (spectrumEnabled) {
+    transitionSelect.value = 'none';
+  }
 }
 
 function switchTab(tab) {
@@ -556,6 +619,8 @@ function updateBadges() {
     audioBadge.classList.add('bg-gray-700', 'text-gray-400');
     audioBadge.classList.remove('bg-primary/20', 'text-primary');
   }
+
+  updateSpectrumControls();
 }
 
 function openCreatePlaylistModal() {
@@ -568,6 +633,7 @@ function openCreatePlaylistModal() {
   document.getElementById('playlistId').value = '';
   document.getElementById('playlistTransitionType').value = 'none';
   document.getElementById('playlistTransitionDuration').value = '1.0';
+  document.getElementById('playlistSpectrumType').value = 'off';
   switchTab('videos');
   updateSelectedVideosDisplay();
   updateAvailableVideosDisplay();
@@ -793,6 +859,7 @@ function editPlaylist(playlistId) {
         document.getElementById('playlistShuffle').value = (playlist.shuffle || playlist.is_shuffle) ? "true" : "false";
         document.getElementById('playlistTransitionType').value = playlist.transition_type || 'none';
         document.getElementById('playlistTransitionDuration').value = playlist.transition_duration || '1.0';
+        document.getElementById('playlistSpectrumType').value = playlist.spectrum_type || 'off';
 
         switchTab('videos');
         updateSelectedVideosDisplay();
@@ -842,6 +909,14 @@ function viewPlaylist(playlistId) {
           transitionEl.innerHTML = `<i class="ti ti-transform"></i> ${playlist.transition_type.charAt(0).toUpperCase() + playlist.transition_type.slice(1)} (${playlist.transition_duration}s)`;
         } else {
           transitionEl.innerHTML = '<i class="ti ti-transform"></i> No Transition';
+        }
+
+        const spectrumEl = document.getElementById('viewSpectrum');
+        const spectrumType = playlist.spectrum_type || 'off';
+        if (isSpectrumTypeEnabled(spectrumType)) {
+          spectrumEl.innerHTML = `<i class="ti ti-wave-sine"></i> ${getSpectrumLabel(spectrumType)} Spectrum`;
+        } else {
+          spectrumEl.innerHTML = '<i class="ti ti-wave-sine"></i> Spectrum Off';
         }
 
         const videosContainer = document.getElementById('playlistVideos');
@@ -950,6 +1025,7 @@ function submitPlaylist() {
     shuffle: document.getElementById('playlistShuffle').value === 'true',
     transition_type: document.getElementById('playlistTransitionType').value,
     transition_duration: parseFloat(document.getElementById('playlistTransitionDuration').value) || 1.0,
+    spectrum_type: document.getElementById('playlistSpectrumType').value,
     videos: selectedVideos.map(v => v.id),
     audios: selectedAudios.map(a => a.id)
   };
@@ -981,6 +1057,7 @@ function submitPlaylist() {
 document.getElementById('searchVideos').addEventListener('input', updateAvailableVideosDisplay);
 document.getElementById('searchImages').addEventListener('input', updateAvailableImagesDisplay);
 document.getElementById('searchAudios').addEventListener('input', updateAvailableAudiosDisplay);
+document.getElementById('playlistSpectrumType').addEventListener('change', updateSpectrumControls);
 
 function showToast(message, type = 'info') {
   const toast = document.createElement('div');

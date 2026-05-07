@@ -58,6 +58,38 @@ function getSlideshowBitrate(stream) {
   return Math.max(2500, Math.min(configuredBitrate, maxBitrate));
 }
 
+const PLAYLIST_SPECTRUM_TYPES = new Set(['minimal', 'wave', 'bars']);
+
+function getPlaylistSpectrumType(playlist) {
+  const spectrumType = (playlist?.spectrum_type || 'off').toString().toLowerCase();
+  return PLAYLIST_SPECTRUM_TYPES.has(spectrumType) ? spectrumType : 'off';
+}
+
+function getSpectrumSafeProfile(stream) {
+  return {
+    resolution: '1280x720',
+    fps: Math.min(getSlideshowFps(stream), 30),
+    bitrate: Math.min(Math.max(parsePositiveInt(stream.bitrate, 2500), 2500), 4000)
+  };
+}
+
+function buildAudioSpectrumFilter({ spectrumType, resolution, fps }) {
+  const [width, height] = resolution.split('x').map(value => parseInt(value, 10));
+  const visualizerHeight = spectrumType === 'minimal' ? 64 : spectrumType === 'bars' ? 128 : 104;
+  const visualizerFilter = spectrumType === 'bars'
+    ? `showfreqs=s=${width}x${visualizerHeight}:mode=bar:ascale=sqrt:fscale=lin:colors=0x60a5fa`
+    : `showwaves=s=${width}x${visualizerHeight}:mode=line:rate=${fps}:colors=0x60a5fa`;
+  const boxHeight = visualizerHeight + 32;
+
+  return [
+    `[0:v]fps=${fps},scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba[base]`,
+    `[1:a]asplit=2[aout][avis]`,
+    `[avis]${visualizerFilter},format=rgba[viz]`,
+    `[base]drawbox=x=0:y=ih-${boxHeight}:w=iw:h=${boxHeight}:color=black@0.35:t=fill[boxed]`,
+    `[boxed][viz]overlay=x=0:y=H-h-16:format=auto,format=yuv420p[v]`
+  ].join(';');
+}
+
 async function runFfmpeg(args) {
   await execFilePromise(ffmpegPath, args, {
     windowsHide: true,
@@ -1030,13 +1062,31 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     }
   }
 
-  const resolution = stream.resolution || '1280x720';
+  let resolution = stream.resolution || '1280x720';
   const normalBitrate = stream.bitrate || 2500;
   const normalFps = stream.fps || 30;
-  const bitrate = isSlideshow ? getSlideshowBitrate(stream) : normalBitrate;
-  const fps = isSlideshow ? getSlideshowFps(stream) : normalFps;
+  let bitrate = isSlideshow ? getSlideshowBitrate(stream) : normalBitrate;
+  let fps = isSlideshow ? getSlideshowFps(stream) : normalFps;
+  const requestedSpectrumType = getPlaylistSpectrumType(playlist);
+  const spectrumEnabled = isSlideshow && hasAudio && requestedSpectrumType !== 'off';
+
+  if (requestedSpectrumType !== 'off' && !spectrumEnabled) {
+    addStreamLog(stream.id, '[Spectrum] Disabled: requires image-only slideshow with background music.');
+  }
+
+  if (spectrumEnabled) {
+    const safeProfile = getSpectrumSafeProfile(stream);
+    resolution = safeProfile.resolution;
+    fps = safeProfile.fps;
+    bitrate = safeProfile.bitrate;
+    addStreamLog(stream.id, `[Spectrum] ${requestedSpectrumType} enabled at ${resolution}/${fps}fps/${bitrate}kbps. Transitions disabled for stability.`);
+  }
+
   const activeCountForTransition = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
   let transitionType = playlist.transition_type || 'none';
+  if (spectrumEnabled && transitionType !== 'none') {
+    transitionType = 'none';
+  }
   if (isSlideshow && transitionType !== 'none' && activeCountForTransition >= 1) {
     console.log('[Adaptive] Disabling transitions for slideshow to save CPU (Copy Mode forced).');
     transitionType = 'none';
@@ -1143,6 +1193,51 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       audioInputArgs = ['-f', 'concat', '-safe', '0', '-i', audioConcatFile];
     } else {
       audioInputArgs = ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
+    }
+
+    if (spectrumEnabled) {
+      const filter = buildAudioSpectrumFilter({
+        spectrumType: requestedSpectrumType,
+        resolution,
+        fps
+      });
+
+      return [
+        '-nostdin',
+        '-loglevel', 'warning',
+        '-stats',
+        '-re',
+        '-fflags', '+genpts+igndts+discardcorrupt',
+        '-avoid_negative_ts', 'make_zero',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatFile,
+        ...audioInputArgs,
+        '-filter_complex', filter,
+        '-map', '[v]',
+        '-map', '[aout]',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-profile:v', 'main',
+        '-pix_fmt', 'yuv420p',
+        '-b:v', `${bitrate}k`,
+        '-maxrate', `${bitrate}k`,
+        '-minrate', `${bitrate}k`,
+        '-bufsize', `${bitrate * 2}k`,
+        '-r', String(fps),
+        '-vsync', '1',
+        '-g', String(fps * 2),
+        '-keyint_min', String(fps),
+        '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-shortest',
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ];
     }
 
     // For static slides without transitions, render once and stream-copy the video.
