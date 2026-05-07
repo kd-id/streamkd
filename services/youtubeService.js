@@ -192,7 +192,7 @@ function omitUndefined(value) {
 }
 
 function mapToYoutubeResolution(resolution) {
-  if (!resolution) return '1080p';
+  if (!resolution) return '720p';
   const res = resolution.toString();
   if (res.includes('3840') || res.includes('2160')) return '2160p';
   if (res.includes('2560') || res.includes('1440')) return '1440p';
@@ -201,7 +201,7 @@ function mapToYoutubeResolution(resolution) {
   if (res.includes('854') || res.includes('480')) return '480p';
   if (res.includes('640') || res.includes('360')) return '360p';
   if (res.includes('426') || res.includes('240')) return '240p';
-  return '1080p';
+  return '720p';
 }
 
 function mapToYoutubeFPS(fps) {

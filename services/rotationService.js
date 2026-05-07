@@ -8,6 +8,7 @@ const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
 const { syncBroadcastMonetization, mapToYoutubeResolution, mapToYoutubeFPS } = require('./youtubeService');
+const { getStableYouTubeProfile } = require('../utils/youtubeProfile');
 
 function getRedirectUri(user) {
   if (user && user.youtube_redirect_uri) {
@@ -265,9 +266,10 @@ async function startRotationStream(rotation, item) {
       actualVideoId = item.video_id.substring(9);
     }
     const media = actualVideoId ? await Video.findById(actualVideoId) : null;
-    const mediaBitrate = parseInt(media?.bitrate, 10) || 2500;
-    const mediaResolution = media?.resolution || '1280x720';
-    const mediaFps = parseFloat(media?.fps) || 30;
+    const youtubeProfile = getStableYouTubeProfile(media);
+    const mediaBitrate = youtubeProfile.bitrate;
+    const mediaResolution = youtubeProfile.resolution;
+    const mediaFps = youtubeProfile.fps;
 
     let useAdvancedSettings = false;
     try {

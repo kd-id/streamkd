@@ -32,6 +32,7 @@ const chunkUploadService = require('./services/chunkUploadService');
 const audioConverter = require('./services/audioConverter');
 const { ensureDirectories } = require('./utils/storage');
 const { getVideoInfo, generateThumbnail, generateImageThumbnail } = require('./utils/videoProcessor');
+const { getStableYouTubeProfile } = require('./utils/youtubeProfile');
 const Video = require('./models/Video');
 const MediaFolder = require('./models/MediaFolder');
 const Playlist = require('./models/Playlist');
@@ -4007,10 +4008,7 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       mediaProfileSource = playlist?.videos?.find(item => item.resolution || item.fps || item.bitrate) || null;
     }
 
-    const sourceResolution = mediaProfileSource?.resolution || '1280x720';
-    const parsedSourceFps = parseFloat(mediaProfileSource?.fps);
-    const sourceFps = Number.isFinite(parsedSourceFps) && parsedSourceFps > 0 ? Math.round(parsedSourceFps) : 30;
-    const sourceBitrate = parseInt(mediaProfileSource?.bitrate, 10) || 4000;
+    const youtubeProfile = getStableYouTubeProfile(mediaProfileSource);
      
     let localThumbnailPath = null;
     if (req.file) {
@@ -4031,9 +4029,9 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       stream_key: '',
       platform: 'YouTube',
       platform_icon: 'ti-brand-youtube',
-      bitrate: sourceBitrate,
-      resolution: sourceResolution,
-      fps: sourceFps,
+      bitrate: youtubeProfile.bitrate,
+      resolution: youtubeProfile.resolution,
+      fps: youtubeProfile.fps,
       orientation: 'horizontal',
       loop_video: loopVideo === 'true' || loopVideo === true,
       use_advanced_settings: false,

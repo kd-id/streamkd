@@ -74,11 +74,31 @@ function getTranscodeCacheDir() {
   return dir;
 }
 
-function getTranscodeCacheKey(videoPath) {
+function normalizeTranscodeProfile(profile = {}) {
+  const resolution = /^\d+x\d+$/i.test(profile.resolution || '') ? profile.resolution : '1280x720';
+  const fps = parsePositiveInt(profile.fps, 30);
+  const bitrate = parsePositiveInt(profile.bitrate, 2500);
+  return { resolution, fps, bitrate };
+}
+
+function buildScalePadFilter(resolution, fps) {
+  const [width, height] = resolution.split('x').map(value => parseInt(value, 10));
+  return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`;
+}
+
+function getTranscodeCacheKey(videoPath, profile = {}) {
   // Use file path + modified time as cache key
   try {
     const stat = fs.statSync(videoPath);
-    const raw = videoPath + '|' + stat.size + '|' + stat.mtimeMs;
+    const normalizedProfile = normalizeTranscodeProfile(profile);
+    const raw = [
+      videoPath,
+      stat.size,
+      stat.mtimeMs,
+      normalizedProfile.resolution,
+      normalizedProfile.fps,
+      normalizedProfile.bitrate
+    ].join('|');
     // Simple hash
     let hash = 0;
     for (let i = 0; i < raw.length; i++) {
@@ -92,44 +112,49 @@ function getTranscodeCacheKey(videoPath) {
   }
 }
 
-function getTranscodeCachePath(videoPath) {
-  const key = getTranscodeCacheKey(videoPath);
+function getTranscodeCachePath(videoPath, profile = {}) {
+  const key = getTranscodeCacheKey(videoPath, profile);
   if (!key) return null;
   return path.join(getTranscodeCacheDir(), `cached_${key}.mp4`);
 }
 
-function hasTranscodeCache(videoPath) {
-  const cachePath = getTranscodeCachePath(videoPath);
+function hasTranscodeCache(videoPath, profile = {}) {
+  const cachePath = getTranscodeCachePath(videoPath, profile);
   return cachePath && fs.existsSync(cachePath);
 }
 
-async function createTranscodeCache(videoPath) {
-  const cachePath = getTranscodeCachePath(videoPath);
+async function createTranscodeCache(videoPath, profile = {}) {
+  const normalizedProfile = normalizeTranscodeProfile(profile);
+  const cachePath = getTranscodeCachePath(videoPath, normalizedProfile);
   if (!cachePath) return null;
   if (fs.existsSync(cachePath)) return cachePath;
 
-  console.log(`[StreamingService] Creating transcode cache for: ${path.basename(videoPath)}`);
+  const keyframeInterval = normalizedProfile.fps * 2;
+  const bitrate = `${normalizedProfile.bitrate}k`;
+
+  console.log(`[StreamingService] Creating transcode cache for: ${path.basename(videoPath)} (${normalizedProfile.resolution} @ ${normalizedProfile.bitrate}k/${normalizedProfile.fps}fps)`);
   try {
     await runFfmpeg([
       '-y',
       '-hide_banner',
       '-loglevel', 'warning',
       '-i', videoPath,
+      '-vf', buildScalePadFilter(normalizedProfile.resolution, normalizedProfile.fps),
       '-c:v', 'libx264',
       '-preset', 'ultrafast',
       '-tune', 'zerolatency',
       '-profile:v', 'main',
       '-pix_fmt', 'yuv420p',
-      '-b:v', '2500k',
-      '-maxrate', '2500k',
-      '-minrate', '2500k',
-      '-bufsize', '5000k',
-      '-g', '60',
-      '-keyint_min', '60',
-      '-x264opts', 'keyint=60:min-keyint=60:no-scenecut',
+      '-b:v', bitrate,
+      '-maxrate', bitrate,
+      '-minrate', bitrate,
+      '-bufsize', `${normalizedProfile.bitrate * 2}k`,
+      '-g', String(keyframeInterval),
+      '-keyint_min', String(keyframeInterval),
+      '-x264opts', `keyint=${keyframeInterval}:min-keyint=${keyframeInterval}:no-scenecut`,
       '-sc_threshold', '0',
       '-force_key_frames', 'expr:gte(t,n_forced*2)',
-      '-r', '30',
+      '-r', String(normalizedProfile.fps),
       '-vsync', 'cfr',
       '-c:a', 'aac',
       '-b:a', '128k',
@@ -302,6 +327,33 @@ function resolvePublicFilePath(relativePath) {
 
   const relPath = relativePath.startsWith('/') ? relativePath.substring(1) : relativePath;
   return path.join(getProjectRoot(), 'public', relPath);
+}
+
+function getTempDir() {
+  const tempDir = path.join(getProjectRoot(), 'temp');
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  return tempDir;
+}
+
+function writeSingleVideoConcatFile(streamId, videoPath, loopVideo) {
+  const concatFile = path.join(getTempDir(), `single_video_${streamId}.txt`);
+  const repeatCount = loopVideo ? 10000 : 1;
+  const normalizedPath = videoPath.replace(/\\/g, '/');
+  let content = '';
+
+  for (let i = 0; i < repeatCount; i++) {
+    content += `file '${normalizedPath}'\n`;
+  }
+
+  fs.writeFileSync(concatFile, content);
+  return concatFile;
+}
+
+function buildSingleVideoInputArgs(stream, videoPath) {
+  const concatFile = writeSingleVideoConcatFile(stream.id, videoPath, stream.loop_video);
+  return ['-f', 'concat', '-safe', '0', '-i', concatFile];
 }
 
 function isYouTubeDestination(stream) {
@@ -1297,31 +1349,30 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   // Otherwise fallback to transcode with adaptive quality based on active stream count
   let canCopyVideo = !shouldForceYouTubeTranscode(stream) && await checkPlaylistCopyCompatible(videoPaths, stream);
   const activeCount = Array.from(activeStreams.values()).filter(s => s.streamId !== stream.id).length;
+  const transcodeProfile = { resolution, fps, bitrate };
 
   // For single-video playlists, try transcode cache if not copy-compatible
   if (!canCopyVideo && !shouldForceYouTubeTranscode(stream) && videoPaths.length === 1) {
     const vp = videoPaths[0];
-    if (hasTranscodeCache(vp)) {
-      const cachedPath = getTranscodeCachePath(vp);
+    if (hasTranscodeCache(vp, transcodeProfile)) {
+      const cachedPath = getTranscodeCachePath(vp, transcodeProfile);
       videoPaths[0] = cachedPath;
       // Rewrite concat file with cached path
       let newConcatContent = '';
       for (let i = 0; i < 10000; i++) {
-        newConcatContent += `file '${cachedPath.replace(/\\\\/g, '/')}'
-`;
+        newConcatContent += `file '${cachedPath.replace(/\\/g, '/')}'\n`;
       }
       fs.writeFileSync(concatFile, newConcatContent);
       canCopyVideo = true;
       addStreamLog(stream.id, '[Cache] Playlist: using cached transcode.');
     } else {
       addStreamLog(stream.id, '[Cache] First-time playlist transcode — creating cache...');
-      const cached = await createTranscodeCache(vp);
+      const cached = await createTranscodeCache(vp, transcodeProfile);
       if (cached) {
         videoPaths[0] = cached;
         let newConcatContent = '';
         for (let i = 0; i < 10000; i++) {
-          newConcatContent += `file '${cached.replace(/\\\\/g, '/')}'
-`;
+          newConcatContent += `file '${cached.replace(/\\/g, '/')}'\n`;
         }
         fs.writeFileSync(concatFile, newConcatContent);
         canCopyVideo = true;
@@ -1434,7 +1485,6 @@ async function buildFFmpegArgs(stream) {
   }
 
   const rtmpUrl = `${stream.rtmp_url.replace(/\/$/, '')}/${stream.stream_key}`;
-  const loopValue = stream.loop_video ? '-1' : '0';
   const isImg = isImageFile(video.filepath);
 
   if (!stream.use_advanced_settings && !shouldForceYouTubeTranscode(stream)) {
@@ -1481,8 +1531,7 @@ async function buildFFmpegArgs(stream) {
       '-stats',
       '-re',
       '-fflags', '+genpts+igndts+discardcorrupt',
-      '-stream_loop', loopValue,
-      '-i', videoPath,
+      ...buildSingleVideoInputArgs(stream, videoPath),
       '-max_muxing_queue_size', '1024',
       '-avoid_negative_ts', 'make_zero',
       '-c:v', 'copy',
@@ -1496,6 +1545,11 @@ async function buildFFmpegArgs(stream) {
 
   const bitrate = isImg ? getSlideshowBitrate(stream) : stream.bitrate || 2500;
   const fps = isImg ? getSlideshowFps(stream) : stream.fps || 30;
+  const transcodeProfile = {
+    resolution: stream.resolution || '1280x720',
+    fps,
+    bitrate
+  };
 
   // --- SMART COPY + ADAPTIVE QUALITY for Single Video (Advanced Settings) ---
   // Check 1: Is original video copy-compatible?
@@ -1505,15 +1559,15 @@ async function buildFFmpegArgs(stream) {
 
   if (!canCopy && !isImg && !shouldForceYouTubeTranscode(stream)) {
     // Check for transcode cache
-    if (hasTranscodeCache(videoPath)) {
-      effectiveVideoPath = getTranscodeCachePath(videoPath);
+    if (hasTranscodeCache(videoPath, transcodeProfile)) {
+      effectiveVideoPath = getTranscodeCachePath(videoPath, transcodeProfile);
       canCopy = true;
       addStreamLog(stream.id, '[Cache] Using cached transcode — no re-encoding needed!');
       console.log(`[StreamingService] Cache hit: ${path.basename(effectiveVideoPath)}`);
     } else {
       // Try to create cache now (blocks start but saves all future starts)
       addStreamLog(stream.id, '[Cache] First-time transcode — creating cache for future streams...');
-      const cached = await createTranscodeCache(videoPath);
+      const cached = await createTranscodeCache(videoPath, transcodeProfile);
       if (cached) {
         effectiveVideoPath = cached;
         canCopy = true;
@@ -1533,8 +1587,7 @@ async function buildFFmpegArgs(stream) {
       '-stats',
       '-re',
       '-fflags', '+genpts+igndts+discardcorrupt',
-      '-stream_loop', loopValue,
-      '-i', effectiveVideoPath,
+      ...buildSingleVideoInputArgs(stream, effectiveVideoPath),
       '-max_muxing_queue_size', '1024',
       '-avoid_negative_ts', 'make_zero',
       '-c:v', 'copy',
@@ -1560,10 +1613,9 @@ async function buildFFmpegArgs(stream) {
     '-stats',
     '-re',
     '-fflags', '+genpts+igndts+discardcorrupt',
-    '-stream_loop', loopValue,
-      '-i', videoPath,
-      '-max_muxing_queue_size', '1024',
-      '-avoid_negative_ts', 'make_zero',
+    ...buildSingleVideoInputArgs(stream, videoPath),
+    '-max_muxing_queue_size', '1024',
+    '-avoid_negative_ts', 'make_zero',
     '-c:v', 'libx264',
     '-preset', adaptive.preset,
     '-tune', isImg ? 'stillimage' : 'zerolatency',
@@ -2042,7 +2094,8 @@ function cleanupTempFiles(streamId) {
   const tempDir = path.join(__dirname, '..', 'temp');
   const files = [
     path.join(tempDir, `playlist_${streamId}.txt`),
-    path.join(tempDir, `playlist_audio_${streamId}.txt`)
+    path.join(tempDir, `playlist_audio_${streamId}.txt`),
+    path.join(tempDir, `single_video_${streamId}.txt`)
   ];
 
   for (const file of files) {
