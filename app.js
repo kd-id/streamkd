@@ -3170,11 +3170,23 @@ app.post('/api/ai/generate-image', isAuthenticated, async (req, res) => {
     });
   } catch (error) {
     console.error('Image Generation error:', error.message);
-    const userMessage = error.message.includes('No active AI provider')
-      ? 'No AI provider configured for image generation. Go to Settings > AI to enable one.'
-      : error.message.includes('404')
-      ? 'Image model not found. Check your AI provider model name in Settings > AI.'
-      : error.message;
+    const rawMessage = error.message || 'Unknown image generation error';
+    let userMessage = rawMessage;
+
+    if (rawMessage.includes('No active AI provider')) {
+      userMessage = 'No AI provider configured for image generation. Go to Settings > AI to enable one.';
+    } else if (/401|403|unauthorized|forbidden|invalid api key|api key/i.test(rawMessage)) {
+      userMessage = `Authentication failed. Check the image provider API key in Settings > AI. Detail: ${rawMessage}`;
+    } else if (/429|rate limit|quota|too many requests/i.test(rawMessage)) {
+      userMessage = `Provider rate limit or quota reached. Try again later or switch API key/provider. Detail: ${rawMessage}`;
+    } else if (/404|model not found|not found/i.test(rawMessage)) {
+      userMessage = `Image model not found. Check your AI provider image model name in Settings > AI. Detail: ${rawMessage}`;
+    } else if (/timeout|ETIMEDOUT|ECONNRESET|socket hang up/i.test(rawMessage)) {
+      userMessage = `Provider timed out while generating the image. Try again or use a faster provider/model. Detail: ${rawMessage}`;
+    } else if (/safety|blocked|content policy/i.test(rawMessage)) {
+      userMessage = `Provider blocked the prompt due to safety/content rules. Edit the prompt and try again. Detail: ${rawMessage}`;
+    }
+
     res.status(500).json({ success: false, error: userMessage });
   }
 });

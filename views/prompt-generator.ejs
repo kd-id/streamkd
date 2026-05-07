@@ -296,9 +296,20 @@
 </div>
 
 <!-- Modal -->
-<div id="imageModal" class="fixed inset-0 bg-black/98 z-[100] hidden items-center justify-center p-8 backdrop-blur-xl" onclick="this.classList.add('hidden')">
-    <div class="relative max-w-5xl w-full h-full flex items-center justify-center">
-        <img id="modalImg" src="" class="max-w-full max-h-full rounded-3xl shadow-2xl border border-gray-800/50">
+<div id="imageModal" class="fixed inset-0 bg-black/98 z-[100] hidden items-center justify-center p-4 sm:p-8 backdrop-blur-xl" onclick="closeImageModal()">
+    <div class="relative w-full h-full flex items-center justify-center" onclick="event.stopPropagation()">
+        <div class="absolute top-3 right-3 z-10 flex items-center gap-2">
+            <button type="button" id="modalDownloadBtn" class="modal-icon-btn" title="Download image" aria-label="Download image">
+                <i class="ti ti-download"></i>
+            </button>
+            <button type="button" id="modalGalleryBtn" class="modal-icon-btn" title="Save to gallery" aria-label="Save to gallery">
+                <i class="ti ti-photo-plus"></i>
+            </button>
+            <button type="button" class="modal-icon-btn" title="Close preview" aria-label="Close preview" onclick="closeImageModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        <img id="modalImg" src="" class="max-w-[96vw] max-h-[92vh] object-contain rounded-2xl shadow-2xl border border-gray-800/50" alt="Full generated image preview">
     </div>
 </div>
 
@@ -324,6 +335,13 @@
         };
 
         const defaultNegativePrompt = 'low quality, blurry, pixelated, distorted anatomy, bad proportions, extra fingers, missing fingers, warped hands, duplicated limbs, deformed face, crossed eyes, text artifacts, watermark, logo, signature, jpeg artifacts, noisy background, oversaturated colors, underexposed, flat lighting';
+        const maxParallelImageJobs = 2;
+        const modalImageState = {
+            url: '',
+            prompt: '',
+            historyId: null,
+            resolution: null
+        };
 
         function gcdClient(a, b) {
             while (b) {
@@ -408,6 +426,11 @@
             const negativeInput = document.getElementById('directNegative');
             if (promptInput) promptInput.value = parsed.prompt;
             if (negativeInput && parsed.negative) negativeInput.value = parsed.negative;
+        }
+
+        function compactToastMessage(message, maxLength = 190) {
+            const clean = String(message || 'Unknown error').replace(/\s+/g, ' ').trim();
+            return clean.length > maxLength ? `${clean.slice(0, maxLength - 1)}...` : clean;
         }
 
         const aspectSelect = document.getElementById('directAspectRatio');
@@ -504,85 +527,217 @@
             if (!prompt) return showToast('Enter prompt.', 'warning');
 
             btn.disabled = true;
-            btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Generating ${count}...`;
+            btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Queue 0/${count}`;
 
-            try {
-                const response = await fetch('/api/ai/generate-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, negativePrompt: negative, size, aspectRatio, count })
-                });
+            const historyPrompt = negative ? `${prompt}\n\nNEGATIVE:\n${negative}` : prompt;
+            let historyPromise = null;
+            let completed = 0;
+            let successCount = 0;
+            let failedCount = 0;
+            const placeholders = [];
 
-                const data = await response.json();
-                if (data.success) {
-                    const images = Array.isArray(data.images) && data.images.length
-                        ? data.images
-                        : (data.imageUrls || [data.imageUrl]).filter(Boolean).map(imageUrl => ({ imageUrl, aspectRatio, resolution: null }));
+            for (let i = 0; i < count; i++) {
+                placeholders.push(createQueuedResultCard(prompt, {
+                    aspectRatio,
+                    index: i + 1,
+                    count
+                }));
+            }
 
-                    const historyPrompt = negative ? `${prompt}\n\nNEGATIVE:\n${negative}` : prompt;
-                    const historyId = await savePromptHistory(historyPrompt, images[0]?.imageUrl || null);
-                    images.forEach(image => addResultToGallery(image.imageUrl, prompt, {
+            const grid = ensureResultsGrid();
+            const referenceNode = grid.firstChild;
+            placeholders.forEach(card => grid.insertBefore(card, referenceNode));
+
+            const ensureHistorySaved = (imageUrl) => {
+                if (!historyPromise) historyPromise = savePromptHistory(historyPrompt, imageUrl);
+                return historyPromise;
+            };
+
+            const jobs = placeholders.map((card, index) => async () => {
+                setResultCardStatus(card, 'generating', `Generating ${index + 1}/${count}`);
+
+                try {
+                    const result = await requestSingleImage(prompt, negative, size, aspectRatio);
+                    const image = result.image;
+                    const historyId = await ensureHistorySaved(image.imageUrl);
+
+                    completeResultCard(card, image.imageUrl, prompt, {
                         aspectRatio: image.aspectRatio || aspectRatio,
                         resolution: image.resolution,
                         historyId
-                    }));
+                    });
+                    successCount += 1;
 
-                    if (data.warnings && data.warnings.length) {
-                        showToast(`Generated with ${data.warnings.length} warning(s).`, 'warning');
-                    } else {
-                        showToast(`Generated ${images.length} image${images.length > 1 ? 's' : ''}!`, 'success');
+                    if (result.warnings.length) {
+                        showToast(`Image ${index + 1} generated with warning.`, 'warning');
                     }
+                } catch (error) {
+                    failedCount += 1;
+                    const reason = error.message || 'Generate failed.';
+                    failResultCard(card, reason);
+                    showToast(`Image ${index + 1} failed: ${compactToastMessage(reason)}`, 'error');
+                } finally {
+                    completed += 1;
+                    btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Queue ${completed}/${count}`;
+                }
+            });
+
+            try {
+                await runImageQueue(jobs, Math.min(maxParallelImageJobs, count));
+
+                if (successCount > 0 && failedCount === 0) {
+                    showToast(`Generated ${successCount} image${successCount > 1 ? 's' : ''}.`, 'success');
+                } else if (successCount > 0) {
+                    showToast(`${successCount} generated, ${failedCount} failed.`, 'warning');
                 } else {
-                    showToast(data.error || 'Failed.', 'error');
+                    showToast('All image jobs failed. Check the error on each card.', 'error');
                 }
             } catch (error) {
-                showToast('Error.', 'error');
+                showToast(error.message || 'Queue failed.', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = `<i class="ti ti-sparkles"></i> Generate Art`;
             }
         };
 
-        function addResultToGallery(url, prompt, meta = {}) {
+        async function requestSingleImage(prompt, negative, size, aspectRatio) {
+            const response = await fetch('/api/ai/generate-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt, negativePrompt: negative, size, aspectRatio, count: 1 })
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || `Generate failed with HTTP ${response.status}`);
+            }
+
+            const image = Array.isArray(data.images) && data.images.length
+                ? data.images[0]
+                : { imageUrl: data.imageUrl, aspectRatio: data.aspectRatio || aspectRatio, resolution: null };
+
+            if (!image || !image.imageUrl) {
+                throw new Error('Provider returned no image preview.');
+            }
+
+            return {
+                image,
+                warnings: Array.isArray(data.warnings) ? data.warnings : []
+            };
+        }
+
+        async function runImageQueue(jobs, concurrency) {
+            const queue = jobs.slice();
+            const workers = Array.from({ length: concurrency }, async () => {
+                while (queue.length) {
+                    const job = queue.shift();
+                    await job();
+                }
+            });
+            await Promise.all(workers);
+        }
+
+        function ensureResultsGrid() {
             const gallery = document.getElementById('resultsGallery');
             const grid = document.getElementById('galleryGrid');
             gallery.classList.remove('hidden');
-            
+            return grid;
+        }
+
+        function createQueuedResultCard(prompt, meta = {}) {
             const item = document.createElement('div');
             item.className = 'gallery-item group animate-in zoom-in duration-500';
             item.style.setProperty('--result-aspect-ratio', (meta.aspectRatio || '1:1').replace(':', ' / '));
+            item.dataset.prompt = prompt;
+            item.dataset.resolution = meta.resolution || '';
             item.innerHTML = `
                 <div class="result-preview-frame relative bg-dark-900 overflow-hidden">
-                    <div class="absolute inset-0 flex items-center justify-center text-gray-600 text-[10px] font-bold uppercase tracking-widest result-loading">
-                        Loading Preview
+                    <div class="result-status absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 text-[10px] font-bold uppercase tracking-widest p-4 text-center">
+                        <i class="result-status-icon ti ti-clock text-2xl"></i>
+                        <span class="result-status-text">Queued ${meta.index || 1}/${meta.count || 1}</span>
+                        <span class="result-error hidden text-red-300 text-[10px] normal-case tracking-normal leading-relaxed max-w-[85%]"></span>
                     </div>
-                    <img class="w-full h-full object-contain cursor-pointer transition-all duration-700 group-hover:scale-[1.03] opacity-0" alt="Generated image preview">
+                    <img class="w-full h-full object-contain cursor-pointer transition-all duration-700 group-hover:scale-[1.03] opacity-0" alt="Generated image preview" loading="lazy">
                 </div>
-                <div class="gallery-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-all flex flex-col justify-end p-5">
-                    <p class="text-[10px] text-gray-200 line-clamp-2 mb-4 font-bold italic"></p>
-                    <div class="flex gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform">
-                        <button type="button" class="download-result flex-1 bg-white text-dark-900 text-[9px] font-black py-3 rounded-xl transition-all">Download</button>
-                        <button type="button" class="gallery-save-result flex-1 bg-primary text-white text-[9px] font-black py-3 rounded-xl transition-all">Gallery</button>
-                    </div>
+                <div class="absolute top-3 right-3 z-10 flex justify-end gap-2 result-actions">
+                    <button type="button" class="preview-result result-action-btn" title="Full preview" aria-label="Full preview" disabled><i class="ti ti-arrows-maximize"></i></button>
+                    <button type="button" class="download-result result-action-btn" title="Download image" aria-label="Download image" disabled><i class="ti ti-download"></i></button>
+                    <button type="button" class="gallery-save-result result-action-btn" title="Save to gallery" aria-label="Save to gallery" disabled><i class="ti ti-photo-plus"></i></button>
+                </div>
+                <div class="gallery-overlay absolute inset-x-0 bottom-0 opacity-0 group-hover:opacity-100 transition-all p-5 pt-12">
+                    <p class="text-[10px] text-gray-200 line-clamp-2 font-bold italic"></p>
                 </div>
             `;
-            const image = item.querySelector('img');
-            const loading = item.querySelector('.result-loading');
-            const caption = item.querySelector('p');
+            item.querySelector('p').textContent = `"${prompt}"`;
+            return item;
+        }
+
+        function setResultCardStatus(card, status, message) {
+            const icon = card.querySelector('.result-status-icon');
+            const text = card.querySelector('.result-status-text');
+            const error = card.querySelector('.result-error');
+
+            if (status === 'generating') {
+                icon.className = 'result-status-icon ti ti-loader animate-spin text-primary text-2xl';
+                text.textContent = message || 'Generating';
+                error.classList.add('hidden');
+            } else if (status === 'preview') {
+                icon.className = 'result-status-icon ti ti-photo-check text-primary text-2xl';
+                text.textContent = message || 'Loading preview';
+                error.classList.add('hidden');
+            }
+        }
+
+        function completeResultCard(card, url, prompt, meta = {}) {
+            const image = card.querySelector('img');
+            const status = card.querySelector('.result-status');
+            const previewBtn = card.querySelector('.preview-result');
+            const downloadBtn = card.querySelector('.download-result');
+            const galleryBtn = card.querySelector('.gallery-save-result');
+
+            card.dataset.imageUrl = url;
+            card.dataset.prompt = prompt;
+            card.dataset.historyId = meta.historyId || '';
+            card.dataset.resolution = meta.resolution || '';
+            card.dataset.aspectRatio = meta.aspectRatio || '1:1';
+            setResultCardStatus(card, 'preview', 'Loading preview');
+
             image.onload = () => {
                 image.classList.remove('opacity-0');
-                loading.classList.add('hidden');
+                status.classList.add('hidden');
             };
-            image.onerror = () => {
-                loading.textContent = 'Preview failed';
-                loading.classList.remove('text-gray-600');
-                loading.classList.add('text-red-400');
-            };
+            image.onerror = () => failResultCard(card, 'Preview image failed to load.');
             image.src = url;
-            image.addEventListener('click', () => viewImage(url));
-            caption.textContent = `"${prompt}"`;
-            item.querySelector('.download-result').addEventListener('click', () => downloadDirect(url, prompt));
-            item.querySelector('.gallery-save-result').addEventListener('click', () => saveToGalleryDirect(url, prompt, meta.historyId, meta.resolution));
+            image.addEventListener('click', () => viewImage(url, prompt, meta));
+
+            [
+                [previewBtn, () => viewImage(url, prompt, meta)],
+                [downloadBtn, () => downloadDirect(url, prompt)],
+                [galleryBtn, () => saveToGalleryDirect(url, prompt, meta.historyId, meta.resolution)]
+            ].forEach(([button, handler]) => {
+                button.disabled = false;
+                button.addEventListener('click', handler);
+            });
+        }
+
+        function failResultCard(card, message) {
+            const status = card.querySelector('.result-status');
+            const icon = card.querySelector('.result-status-icon');
+            const text = card.querySelector('.result-status-text');
+            const error = card.querySelector('.result-error');
+
+            card.classList.add('border-red-500/40');
+            status.classList.remove('hidden');
+            icon.className = 'result-status-icon ti ti-alert-triangle text-red-400 text-2xl';
+            text.textContent = 'Failed';
+            error.textContent = message;
+            error.classList.remove('hidden');
+        }
+
+        function addResultToGallery(url, prompt, meta = {}) {
+            const grid = ensureResultsGrid();
+            const item = createQueuedResultCard(prompt, meta);
+            completeResultCard(item, url, prompt, meta);
             grid.prepend(item);
         }
 
@@ -717,10 +872,34 @@
             } catch (e) {}
         };
 
-        window.viewImage = function(url) {
+        window.closeImageModal = function() {
             const modal = document.getElementById('imageModal');
             const img = document.getElementById('modalImg');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            img.src = '';
+        };
+
+        window.viewImage = function(url, prompt = '', meta = {}) {
+            const modal = document.getElementById('imageModal');
+            const img = document.getElementById('modalImg');
+            const downloadBtn = document.getElementById('modalDownloadBtn');
+            const galleryBtn = document.getElementById('modalGalleryBtn');
+
+            modalImageState.url = url;
+            modalImageState.prompt = prompt || 'ai-generated-image';
+            modalImageState.historyId = meta.historyId || null;
+            modalImageState.resolution = meta.resolution || null;
+
             img.src = url;
+            downloadBtn.onclick = () => downloadDirect(modalImageState.url, modalImageState.prompt);
+            galleryBtn.onclick = () => saveToGalleryDirect(
+                modalImageState.url,
+                modalImageState.prompt,
+                modalImageState.historyId,
+                modalImageState.resolution
+            );
+
             modal.classList.remove('hidden');
             modal.classList.add('flex');
         };
@@ -789,6 +968,34 @@
     .result-preview-frame {
         aspect-ratio: var(--result-aspect-ratio, 1 / 1);
         min-height: 12rem;
+    }
+    .result-action-btn,
+    .modal-icon-btn {
+        width: 2.5rem;
+        height: 2.5rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        background: rgba(15, 23, 42, 0.86);
+        color: #e5e7eb;
+        backdrop-filter: blur(16px);
+        transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+    .result-action-btn:hover,
+    .modal-icon-btn:hover {
+        transform: translateY(-1px);
+        color: #3b82f6;
+        border-color: rgba(59, 130, 246, 0.65);
+        background: rgba(15, 23, 42, 0.96);
+    }
+    .result-action-btn:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+        transform: none;
+        color: #64748b;
+        border-color: rgba(100, 116, 139, 0.16);
     }
     .gallery-overlay { background: linear-gradient(to top, rgba(2, 6, 23, 0.98) 0%, rgba(2, 6, 23, 0.4) 100%); }
     select {
