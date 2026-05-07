@@ -282,6 +282,12 @@ PORT=7575
 SESSION_SECRET=your_random_secret_here
 NODE_ENV=development
 APP_BASE_URL=https://domain-anda.com
+
+# Optional: lower CPU for slideshow audio spectrum
+SPECTRUM_MAX_RESOLUTION=854x480
+SPECTRUM_MAX_FPS=15
+SPECTRUM_MAX_BITRATE=1600
+SPECTRUM_X264_THREADS=1
 ```
 
 ### 2. Build dan Jalankan

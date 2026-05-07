@@ -46,10 +46,34 @@ function parsePositiveInt(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseOutputResolution(value, fallback = { width: 1280, height: 720 }) {
+  const match = /^(\d+)x(\d+)$/i.exec(String(value || '').trim());
+  if (!match) {
+    return fallback;
+  }
+
+  const width = parsePositiveInt(match[1], fallback.width);
+  const height = parsePositiveInt(match[2], fallback.height);
+  return { width, height };
+}
+
+function formatResolution({ width, height }) {
+  return `${width}x${height}`;
+}
+
+function getBoundedResolution(requestedResolution, maxResolution) {
+  const requested = parseOutputResolution(requestedResolution);
+  const maximum = parseOutputResolution(maxResolution, { width: 854, height: 480 });
+  const requestedArea = requested.width * requested.height;
+  const maxArea = maximum.width * maximum.height;
+
+  return formatResolution(requestedArea <= maxArea ? requested : maximum);
+}
+
 function getSlideshowFps(stream) {
   const configuredFps = parsePositiveInt(stream.fps, 30);
   const maxFps = parsePositiveInt(process.env.SLIDESHOW_MAX_FPS, 30);
-  return Math.max(20, Math.min(configuredFps, maxFps));
+  return Math.max(10, Math.min(configuredFps, maxFps));
 }
 
 function getSlideshowBitrate(stream) {
@@ -66,27 +90,36 @@ function getPlaylistSpectrumType(playlist) {
 }
 
 function getSpectrumSafeProfile(stream) {
+  const maxResolution = process.env.SPECTRUM_MAX_RESOLUTION || '854x480';
+  const maxFps = parsePositiveInt(process.env.SPECTRUM_MAX_FPS, 15);
+  const maxBitrate = parsePositiveInt(process.env.SPECTRUM_MAX_BITRATE, 1600);
+
   return {
-    resolution: '1280x720',
-    fps: Math.min(getSlideshowFps(stream), 30),
-    bitrate: Math.min(Math.max(parsePositiveInt(stream.bitrate, 2500), 2500), 4000)
+    resolution: getBoundedResolution(stream.resolution || '1280x720', maxResolution),
+    fps: Math.max(10, Math.min(getSlideshowFps(stream), maxFps)),
+    bitrate: Math.max(800, Math.min(parsePositiveInt(stream.bitrate, maxBitrate), maxBitrate))
   };
+}
+
+function getSpectrumThreadCount() {
+  return String(parsePositiveInt(process.env.SPECTRUM_X264_THREADS, 1));
 }
 
 function buildAudioSpectrumFilter({ spectrumType, resolution, fps }) {
   const [width, height] = resolution.split('x').map(value => parseInt(value, 10));
-  const visualizerHeight = spectrumType === 'minimal' ? 64 : spectrumType === 'bars' ? 128 : 104;
+  const analyzerWidth = Math.min(width, parsePositiveInt(process.env.SPECTRUM_ANALYZER_WIDTH, 640));
+  const visualizerHeight = spectrumType === 'minimal' ? 48 : spectrumType === 'bars' ? 88 : 72;
   const visualizerFilter = spectrumType === 'bars'
-    ? `showfreqs=s=${width}x${visualizerHeight}:mode=bar:ascale=sqrt:fscale=lin:colors=0x60a5fa`
-    : `showwaves=s=${width}x${visualizerHeight}:mode=line:rate=${fps}:colors=0x60a5fa`;
-  const boxHeight = visualizerHeight + 32;
+    ? `showfreqs=s=${analyzerWidth}x${visualizerHeight}:mode=bar:ascale=sqrt:fscale=lin:win_size=w512:overlap=0:averaging=2:cmode=combined:colors=0x60a5fa`
+    : `showwaves=s=${analyzerWidth}x${visualizerHeight}:mode=p2p:rate=${fps}:colors=0x60a5fa`;
+  const boxHeight = visualizerHeight + 24;
 
   return [
     `[0:v]fps=${fps},scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},format=rgba[base]`,
     `[1:a]asplit=2[aout][avis]`,
-    `[avis]${visualizerFilter},format=rgba[viz]`,
+    `[avis]${visualizerFilter},fps=${fps},format=rgba,scale=${width}:${visualizerHeight}:flags=fast_bilinear[viz]`,
     `[base]drawbox=x=0:y=ih-${boxHeight}:w=iw:h=${boxHeight}:color=black@0.35:t=fill[boxed]`,
-    `[boxed][viz]overlay=x=0:y=H-h-16:format=auto,format=yuv420p[v]`
+    `[boxed][viz]overlay=x=0:y=H-h-12:format=auto,format=yuv420p[v]`
   ].join(';');
 }
 
@@ -1201,6 +1234,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
         resolution,
         fps
       });
+      const spectrumThreads = getSpectrumThreadCount();
 
       return [
         '-nostdin',
@@ -1213,6 +1247,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
         '-safe', '0',
         '-i', concatFile,
         ...audioInputArgs,
+        '-filter_complex_threads', spectrumThreads,
         '-filter_complex', filter,
         '-map', '[v]',
         '-map', '[aout]',
@@ -1230,6 +1265,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
         '-g', String(fps * 2),
         '-keyint_min', String(fps),
         '-x264opts', `keyint=${fps * 2}:min-keyint=${fps}:no-scenecut`,
+        '-threads', spectrumThreads,
         '-c:a', 'aac',
         '-b:a', '128k',
         '-ar', '44100',

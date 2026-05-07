@@ -189,7 +189,7 @@
             <div>
               <label for="playlistSpectrumType" class="text-sm font-medium mb-2 flex items-center gap-2">
                 Audio Spectrum
-                <span id="spectrumCpuBadge" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-yellow-600/20 text-yellow-300 border border-yellow-600/30">Higher CPU</span>
+                <span id="spectrumCpuBadge" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-emerald-600/20 text-emerald-300 border border-emerald-600/30">Eco mode</span>
               </label>
               <select id="playlistSpectrumType" name="spectrum_type"
                 class="w-full bg-dark-700 border border-gray-600 text-white px-4 py-2.5 rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
@@ -213,6 +213,7 @@
             <ul class="text-xs text-gray-400 space-y-1">
               <li>• <strong>Seamless Loop:</strong> We automatically add a transition from the last image back to the first for a smooth loop.</li>
               <li>• <strong>CPU Warning:</strong> Transitions use more CPU. Stick to <strong>Fade</strong> or <strong>Dissolve</strong> for best stability on 1-Core VPS.</li>
+              <li>• <strong>Spectrum:</strong> Audio spectrum uses an eco profile by default (480p/15fps) because it must render live.</li>
               <li>• <strong>Limit:</strong> For stable streaming with transitions, we recommend using max 20 images per playlist.</li>
             </ul>
           </div>
