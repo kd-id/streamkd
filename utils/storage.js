@@ -5,6 +5,8 @@ const ensureDirectories = () => {
     path.join(__dirname, '../public/uploads/videos'),
     path.join(__dirname, '../public/uploads/thumbnails'),
     path.join(__dirname, '../public/uploads/avatars'),
+    path.join(__dirname, '../public/uploads/ai-generated'),
+    path.join(__dirname, '../public/uploads/gallery'),
     path.join(__dirname, '../public/uploads/temp'),
     path.join(__dirname, '../public/uploads/temp/info'),
     path.join(__dirname, '../public/uploads/audio')
@@ -45,6 +47,8 @@ module.exports = {
     videos: path.join(__dirname, '../public/uploads/videos'),
     thumbnails: path.join(__dirname, '../public/uploads/thumbnails'),
     avatars: path.join(__dirname, '../public/uploads/avatars'),
+    aiGenerated: path.join(__dirname, '../public/uploads/ai-generated'),
+    gallery: path.join(__dirname, '../public/uploads/gallery'),
     temp: path.join(__dirname, '../public/uploads/temp'),
     tempInfo: path.join(__dirname, '../public/uploads/temp/info'),
     audio: path.join(__dirname, '../public/uploads/audio')

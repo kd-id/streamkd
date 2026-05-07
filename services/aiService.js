@@ -563,6 +563,14 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
             }
         }
 
+        if (variations.length === 0 && text.trim()) {
+            variations.push({
+                title: 'AI Output',
+                description: text.trim(),
+                tags: ''
+            });
+        }
+
         console.log('[AIService] Parsing complete. Variations found:', variations.length);
         return variations.slice(0, 5);
     }
@@ -637,22 +645,34 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
             throw new Error('AI configuration not found.');
         }
 
-        const prompt = `Expand these keywords into a highly detailed, professional Master Prompt for image generation. 
+        const prompt = `You are a senior visual prompt director for premium AI image generation.
+
+Expand the user's keyword(s) into one highly detailed, imaginative, production-ready Master Prompt and one Negative Prompt.
+
         Keywords: ${keywords}
         
         Rules:
-        1. Follow the Master Formula: Subject, Activity, Location, Art Style, Lighting, Mood, Color Palette, Camera Composition, Technical Params.
-        2. Output MUST be PURE TEXT. Do NOT use brackets like [Subject] or labels like "Subject:". 
-        3. Just provide the rich descriptive text itself.
-        4. At the end, provide a Negative Prompt section labeled "NEGATIVE:".
+        1. Output in English.
+        2. Make the master prompt broad, cinematic, specific, and visually rich.
+        3. Expand the idea with subject details, action, environment, composition, art direction, lighting, mood, color palette, camera/lens, texture, and technical quality.
+        4. Avoid generic filler. Add concrete visual decisions that make the image feel premium and original.
+        5. Do not use markdown bullets, brackets, or explanations.
+        6. The master prompt should be 120-180 words.
+        7. End with a Negative Prompt section labeled exactly "NEGATIVE:".
         
         Output format:
-        [Vivid descriptive master prompt text here]
+        MASTER PROMPT:
+        Vivid descriptive master prompt text here.
         
-        NEGATIVE: [Negative prompt text here]`;
+        NEGATIVE:
+        low quality, blurry, bad anatomy, extra fingers, warped hands, duplicated limbs, distorted face, bad proportions, text, watermark, logo, signature, jpeg artifacts, noisy, oversaturated, underexposed, flat lighting`;
 
         const response = await this.generateMetadata(keywords, '', { customPrompt: prompt });
-        return response[0].description;
+        const result = response?.[0]?.description || response?.[0]?.title || '';
+        if (!result.trim()) {
+            throw new Error('AI provider returned an empty magic prompt.');
+        }
+        return result.trim();
     }
 
     /**
@@ -736,12 +756,16 @@ PENTING: Berikan 5 variasi hasil yang berbeda. Format setiap variasi dimulai den
         const base = provider.endpoint;
 
         if (provider.type === 'gemini') {
+            const parameters = { sampleCount: 1 };
+            if (['1:1', '3:4', '4:3', '9:16', '16:9'].includes(options.aspectRatio)) {
+                parameters.aspectRatio = options.aspectRatio;
+            }
             url = base 
                 ? `${base.replace(/\/$/, '')}/v1beta/models/${imageModel}:predict?key=${key}`
                 : `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:predict?key=${key}`;
             payload = { 
                 instances: [{ prompt }],
-                parameters: { sampleCount: 1 }
+                parameters
             };
             headers = { 'Content-Type': 'application/json' };
         } else if (provider.type === 'openrouter') {

@@ -159,6 +159,169 @@ function isImageFile(filepath) {
   return ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
 }
 
+function normalizeAspectRatio(value) {
+  if (!value || typeof value !== 'string') return '1:1';
+  const match = value.trim().match(/^(\d{1,2})\s*[:/x]\s*(\d{1,2})$/i);
+  if (!match) return '1:1';
+
+  const width = parseInt(match[1], 10);
+  const height = parseInt(match[2], 10);
+  if (!width || !height) return '1:1';
+
+  const ratio = width / height;
+  if (ratio < 0.25 || ratio > 4) return '1:1';
+
+  const divisor = gcd(width, height);
+  return `${width / divisor}:${height / divisor}`;
+}
+
+function gcd(a, b) {
+  while (b) {
+    const temp = b;
+    b = a % b;
+    a = temp;
+  }
+  return a;
+}
+
+function getAspectDimensions(aspectRatio) {
+  const [ratioW, ratioH] = normalizeAspectRatio(aspectRatio).split(':').map(Number);
+  const longSide = 1536;
+
+  if (ratioW === ratioH) {
+    return { width: 1024, height: 1024 };
+  }
+
+  if (ratioW > ratioH) {
+    return {
+      width: longSide,
+      height: toEven((longSide * ratioH) / ratioW)
+    };
+  }
+
+  return {
+    width: toEven((longSide * ratioW) / ratioH),
+    height: longSide
+  };
+}
+
+function toEven(value) {
+  return Math.max(64, Math.round(value / 2) * 2);
+}
+
+function getProviderSafeSize(aspectRatio) {
+  const [ratioW, ratioH] = normalizeAspectRatio(aspectRatio).split(':').map(Number);
+  const ratio = ratioW / ratioH;
+  if (Math.abs(ratio - 1) < 0.08) return '1024x1024';
+  return ratio > 1 ? '1792x1024' : '1024x1792';
+}
+
+function buildImagePromptForGeneration(prompt, negativePrompt, aspectRatio) {
+  const normalizedRatio = normalizeAspectRatio(aspectRatio);
+  const [ratioW, ratioH] = normalizedRatio.split(':').map(Number);
+  const orientation = ratioW === ratioH ? 'square' : ratioW > ratioH ? 'landscape' : 'portrait';
+  const parts = [
+    prompt.trim(),
+    `Canvas and composition requirement: generate for an exact ${normalizedRatio} ${orientation} aspect ratio. Frame the subject, negative space, horizon, camera angle, and visual balance specifically for ${normalizedRatio}; do not compose it as a generic square crop.`
+  ];
+
+  if (negativePrompt && negativePrompt.trim()) {
+    parts.push(`Negative prompt: ${negativePrompt.trim()}`);
+  }
+
+  return parts.join('\n\n');
+}
+
+async function readImageBufferFromSource(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    throw new Error('Image URL is required');
+  }
+
+  if (imageUrl.startsWith('data:image/')) {
+    const match = imageUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    if (!match) throw new Error('Invalid base64 image data');
+    return Buffer.from(match[1], 'base64');
+  }
+
+  if (imageUrl.startsWith('/uploads/')) {
+    const publicDir = path.resolve(__dirname, 'public');
+    const localPath = path.resolve(publicDir, imageUrl.replace(/^\/+/, ''));
+    if (!localPath.startsWith(publicDir + path.sep)) {
+      throw new Error('Invalid local image path');
+    }
+    return fs.promises.readFile(localPath);
+  }
+
+  const response = await axios.get(imageUrl, {
+    responseType: 'arraybuffer',
+    timeout: 120000
+  });
+  return Buffer.from(response.data);
+}
+
+function runFfmpegImageNormalize(inputPath, outputPath, dimensions) {
+  return new Promise((resolve, reject) => {
+    const filters = [
+      `scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=increase`,
+      `crop=${dimensions.width}:${dimensions.height}`
+    ];
+
+    ffmpeg(inputPath)
+      .outputOptions([
+        '-vf', filters.join(','),
+        '-frames:v', '1'
+      ])
+      .output(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', reject)
+      .run();
+  });
+}
+
+function detectImageExtension(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '.img';
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return '.png';
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return '.jpg';
+  if (buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return '.webp';
+  if (buffer.slice(0, 3).toString('ascii') === 'GIF') return '.gif';
+  return '.img';
+}
+
+async function storeGeneratedImageForPreview(rawImageUrl, aspectRatio) {
+  const buffer = await readImageBufferFromSource(rawImageUrl);
+  const generatedDir = path.join(__dirname, 'public', 'uploads', 'ai-generated');
+  const tempDir = path.join(__dirname, 'public', 'uploads', 'temp');
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  const token = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const tempInputPath = path.join(tempDir, `ai-source-${token}${detectImageExtension(buffer)}`);
+  const outputFileName = `ai-${token}.png`;
+  const outputPath = path.join(generatedDir, outputFileName);
+  const dimensions = getAspectDimensions(aspectRatio);
+
+  try {
+    fs.writeFileSync(tempInputPath, buffer);
+    await runFfmpegImageNormalize(tempInputPath, outputPath, dimensions);
+    return {
+      imageUrl: `/uploads/ai-generated/${outputFileName}`,
+      resolution: `${dimensions.width}x${dimensions.height}`
+    };
+  } finally {
+    fs.promises.unlink(tempInputPath).catch(() => {});
+  }
+}
+
+function sanitizeDownloadName(value) {
+  const base = (value || 'ai-generated-image')
+    .toString()
+    .slice(0, 80)
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+  return base || 'ai-generated-image';
+}
+
 const PLAYLIST_SPECTRUM_TYPES = new Set(['off', 'minimal', 'wave', 'bars']);
 
 function normalizePlaylistSpectrumType(value) {
@@ -2955,12 +3118,56 @@ app.post('/api/ai/generate', isAuthenticated, async (req, res) => {
 
 app.post('/api/ai/generate-image', isAuthenticated, async (req, res) => {
   try {
-    const { prompt, size } = req.body;
+    const { prompt, negativePrompt, size, aspectRatio, count } = req.body;
     if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required' });
-    
-    console.log('[Generate Image] Prompt:', prompt.substring(0, 80), '| Size:', size);
-    const imageUrl = await AIService.generateImage(prompt, { size: size || '1024x1024' });
-    res.json({ success: true, imageUrl });
+
+    const normalizedAspectRatio = normalizeAspectRatio(aspectRatio || '1:1');
+    const requestedCount = Math.min(Math.max(parseInt(count, 10) || 1, 1), 5);
+    const generationSize = size || getProviderSafeSize(normalizedAspectRatio);
+    const finalPrompt = buildImagePromptForGeneration(prompt, negativePrompt, normalizedAspectRatio);
+
+    console.log('[Generate Image] Prompt:', prompt.substring(0, 80), '| Size:', generationSize, '| Aspect:', normalizedAspectRatio, '| Count:', requestedCount);
+
+    const imageUrls = [];
+    const generatedImages = [];
+    const warnings = [];
+
+    for (let i = 0; i < requestedCount; i++) {
+      const rawImageUrl = await AIService.generateImage(finalPrompt, {
+        size: generationSize,
+        aspectRatio: normalizedAspectRatio
+      });
+
+      try {
+        const stored = await storeGeneratedImageForPreview(rawImageUrl, normalizedAspectRatio);
+        imageUrls.push(stored.imageUrl);
+        generatedImages.push({
+          imageUrl: stored.imageUrl,
+          originalImageUrl: rawImageUrl,
+          resolution: stored.resolution,
+          aspectRatio: normalizedAspectRatio
+        });
+      } catch (storeError) {
+        console.error('Generated image normalization failed:', storeError.message);
+        warnings.push(`Image ${i + 1} could not be normalized for preview ratio: ${storeError.message}`);
+        imageUrls.push(rawImageUrl);
+        generatedImages.push({
+          imageUrl: rawImageUrl,
+          originalImageUrl: rawImageUrl,
+          resolution: null,
+          aspectRatio: normalizedAspectRatio
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      imageUrl: imageUrls[0],
+      imageUrls,
+      images: generatedImages,
+      aspectRatio: normalizedAspectRatio,
+      warnings
+    });
   } catch (error) {
     console.error('Image Generation error:', error.message);
     const userMessage = error.message.includes('No active AI provider')
@@ -2975,19 +3182,25 @@ app.post('/api/ai/generate-image', isAuthenticated, async (req, res) => {
 app.post('/api/ai/save-history', isAuthenticated, async (req, res) => {
   try {
     const { prompt, imageUrl } = req.body;
-    const db = require('./db/database');
-    const result = await new Promise((resolve, reject) => {
-      db.run(
-        'INSERT INTO ai_prompt_history (user_id, prompt_text, image_url, created_at) VALUES (?, ?, ?, ?)',
-        [req.session.userId, prompt, imageUrl, new Date().toISOString()],
-        function(err) {
-          if (err) reject(err);
-          else resolve(this.lastID);
-        }
-      );
-    });
-    res.json({ success: true, id: result });
+    if (!prompt || !prompt.trim()) {
+      return res.status(400).json({ success: false, error: 'Prompt is required' });
+    }
+    const id = await AIService.saveHistory(req.session.userId, prompt.trim(), imageUrl || null);
+    res.json({ success: true, id });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/ai/download-image', isAuthenticated, async (req, res) => {
+  try {
+    const { imageUrl, filename } = req.body;
+    const buffer = await readImageBufferFromSource(imageUrl);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="${sanitizeDownloadName(filename)}.png"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('AI image download error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -5207,16 +5420,6 @@ app.post('/api/rotations/:id/stop', isAuthenticated, async (req, res) => {
   }
 });
 
-app.post('/api/ai/save-history', isAuthenticated, async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    const id = await AIService.saveHistory(req.session.userId, prompt);
-    res.json({ success: true, id });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 app.get('/prompt-generator', isAuthenticated, async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
@@ -5236,8 +5439,8 @@ app.get('/prompt-generator', isAuthenticated, async (req, res) => {
 app.post('/api/ai/magic-prompt', isAuthenticated, async (req, res) => {
   try {
     const { keywords } = req.body;
-    if (!keywords || keywords.trim().split(/\s+/).length < 2) {
-        return res.status(400).json({ success: false, error: 'Minimal 2 kata kunci diperlukan.' });
+    if (!keywords || keywords.trim().length < 2) {
+        return res.status(400).json({ success: false, error: 'Minimal 1 keyword diperlukan.' });
     }
     const fullPrompt = await AIService.generateMagicPrompt(keywords);
     res.json({ success: true, prompt: fullPrompt });
@@ -5247,33 +5450,22 @@ app.post('/api/ai/magic-prompt', isAuthenticated, async (req, res) => {
   }
 });
 
-// NOTE: /api/ai/generate-image is defined earlier in this file (around line 2682) with full size param support
+// NOTE: /api/ai/generate-image is defined earlier with count, aspect ratio, preview, and download support.
 
 app.post('/api/ai/save-to-gallery', isAuthenticated, async (req, res) => {
   try {
-    const { imageUrl, prompt, historyId } = req.body;
+    const { imageUrl, prompt, historyId, resolution } = req.body;
     if (!imageUrl) return res.status(400).json({ success: false, error: 'Image URL is required' });
 
-    const response = await axios({
-      url: imageUrl,
-      method: 'GET',
-      responseType: 'stream'
-    });
-
-    const fileName = `ai-${Date.now()}.png`;
+    const imageBuffer = await readImageBufferFromSource(imageUrl);
+    const fileName = `ai-gallery-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.png`;
     const galleryDir = path.join(__dirname, 'public', 'uploads', 'gallery');
     if (!fs.existsSync(galleryDir)) {
       fs.mkdirSync(galleryDir, { recursive: true });
     }
     
     const filePath = path.join(galleryDir, fileName);
-    const writer = fs.createWriteStream(filePath);
-    response.data.pipe(writer);
-
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-    });
+    fs.writeFileSync(filePath, imageBuffer);
 
     const stats = fs.statSync(filePath);
     const relativePath = `/uploads/gallery/${fileName}`;
@@ -5284,7 +5476,7 @@ app.post('/api/ai/save-to-gallery', isAuthenticated, async (req, res) => {
       thumbnail_path: relativePath,
       file_size: stats.size,
       format: 'png',
-      resolution: '1024x1024',
+      resolution: resolution || null,
       user_id: req.session.userId,
       folder_id: null
     };

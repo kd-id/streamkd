@@ -206,10 +206,30 @@
                         <div class="bg-dark-900/80 p-6 rounded-3xl border border-gray-700/30 space-y-8">
                             <div>
                                 <label class="block text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">Aspect Ratio</label>
-                                <select id="directSize" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-4 px-4 text-[11px] text-white appearance-none cursor-pointer hover:bg-dark-600 transition-colors">
-                                    <option value="1024x1024">Square (1:1)</option>
-                                    <option value="1024x1792">Portrait (9:16)</option>
-                                    <option value="1792x1024">Landscape (16:9)</option>
+                                <select id="directAspectRatio" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-4 px-4 text-[11px] text-white appearance-none cursor-pointer hover:bg-dark-600 transition-colors">
+                                    <option value="1:1">Square (1:1)</option>
+                                    <option value="9:16">Portrait (9:16)</option>
+                                    <option value="16:9">Landscape (16:9)</option>
+                                    <option value="4:5">Portrait (4:5)</option>
+                                    <option value="3:4">Portrait (3:4)</option>
+                                    <option value="4:3">Landscape (4:3)</option>
+                                    <option value="21:9">Wide (21:9)</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                                <div id="customAspectWrap" class="hidden grid grid-cols-[1fr_auto_1fr] gap-2 items-center mt-3">
+                                    <input type="number" id="customAspectW" min="1" max="32" value="4" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-3 px-4 text-[11px] text-white focus:ring-1 focus:ring-primary">
+                                    <span class="text-gray-500 text-xs font-black">:</span>
+                                    <input type="number" id="customAspectH" min="1" max="32" value="5" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-3 px-4 text-[11px] text-white focus:ring-1 focus:ring-primary">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">Image Count</label>
+                                <select id="directCount" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-4 px-4 text-[11px] text-white appearance-none cursor-pointer hover:bg-dark-600 transition-colors">
+                                    <option value="1">1 Image</option>
+                                    <option value="2">2 Images</option>
+                                    <option value="3">3 Images</option>
+                                    <option value="4">4 Images</option>
+                                    <option value="5">5 Images</option>
                                 </select>
                             </div>
                             <button onclick="generateDirectImage()" id="btnDirectGenerate" class="w-full py-5 bg-primary hover:bg-secondary text-dark-900 font-black rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl shadow-primary/10 active:scale-[0.97] group">
@@ -234,24 +254,29 @@
                         <div class="w-1 h-6 bg-primary rounded-full"></div>
                         <h3 class="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em]">Prompt History</h3>
                     </div>
-                    <p class="text-[9px] text-gray-600 italic font-bold">Total <%= history.length %> items recorded</p>
+                    <p class="text-[9px] text-gray-600 italic font-bold">Total <span id="historyCount"><%= history.length %></span> items recorded</p>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div id="historyGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     <% if (history && history.length > 0) { %>
                         <% history.forEach(item => { %>
                             <div class="bg-dark-900/50 rounded-2xl border border-gray-700/30 p-5 hover:border-primary/40 transition-all group relative">
+                                <% if (item.image_url) { %>
+                                    <button type="button" data-image-url="<%= encodeURIComponent(item.image_url) %>" onclick="viewImage(decodeURIComponent(this.dataset.imageUrl))" class="w-full overflow-hidden rounded-xl bg-dark-800 border border-gray-700/30 mb-4 block">
+                                        <img src="<%= item.image_url %>" alt="Generated image preview" class="w-full h-36 object-cover" loading="lazy">
+                                    </button>
+                                <% } %>
                                 <p class="text-[11px] text-gray-300 line-clamp-3 leading-relaxed italic mb-5">"<%= item.prompt_text %>"</p>
                                 <div class="flex items-center justify-between pt-4 border-t border-gray-700/20">
                                     <span class="text-[9px] text-gray-600 font-bold tracking-tighter"><%= new Date(item.created_at).toLocaleString() %></span>
                                     <div class="flex gap-2">
-                                        <button onclick="copyRawPrompt(this, `<%= item.prompt_text.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Copy Text">
+                                        <button data-prompt="<%= encodeURIComponent(item.prompt_text) %>" onclick="copyRawPrompt(this, decodeURIComponent(this.dataset.prompt))" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Copy Text">
                                             <i class="ti ti-copy text-sm"></i>
                                         </button>
-                                        <button onclick="reusePrompt(`<%= item.prompt_text.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Use as Prompt">
+                                        <button data-prompt="<%= encodeURIComponent(item.prompt_text) %>" onclick="reusePrompt(decodeURIComponent(this.dataset.prompt))" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Use as Prompt">
                                             <i class="ti ti-refresh text-sm"></i>
                                         </button>
-                                        <button onclick="deleteHistory(<%= item.id %>)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-xl transition-all" title="Delete">
+                                        <button data-id="<%= item.id %>" onclick="deleteHistory(this.dataset.id)" class="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-xl transition-all" title="Delete">
                                             <i class="ti ti-trash text-sm"></i>
                                         </button>
                                     </div>
@@ -259,7 +284,7 @@
                             </div>
                         <% }); %>
                     <% } else { %>
-                        <div class="col-span-full py-20 flex flex-col items-center justify-center opacity-30">
+                        <div id="historyEmptyState" class="col-span-full py-20 flex flex-col items-center justify-center opacity-30">
                             <i class="ti ti-history text-4xl mb-4"></i>
                             <span class="text-xs font-black uppercase tracking-widest">No History Available</span>
                         </div>
@@ -298,6 +323,142 @@
             }
         };
 
+        const defaultNegativePrompt = 'low quality, blurry, pixelated, distorted anatomy, bad proportions, extra fingers, missing fingers, warped hands, duplicated limbs, deformed face, crossed eyes, text artifacts, watermark, logo, signature, jpeg artifacts, noisy background, oversaturated colors, underexposed, flat lighting';
+
+        function gcdClient(a, b) {
+            while (b) {
+                const temp = b;
+                b = a % b;
+                a = temp;
+            }
+            return a;
+        }
+
+        function normalizeClientAspectRatio(value) {
+            const match = String(value || '1:1').match(/^(\d{1,2})\s*[:/x]\s*(\d{1,2})$/i);
+            if (!match) return '1:1';
+            const width = parseInt(match[1], 10);
+            const height = parseInt(match[2], 10);
+            if (!width || !height) return '1:1';
+            const ratio = width / height;
+            if (ratio < 0.25 || ratio > 4) return '1:1';
+            const divisor = gcdClient(width, height);
+            return `${width / divisor}:${height / divisor}`;
+        }
+
+        function getSelectedAspectRatio() {
+            const selected = document.getElementById('directAspectRatio').value;
+            if (selected !== 'custom') return normalizeClientAspectRatio(selected);
+            const width = document.getElementById('customAspectW').value || '1';
+            const height = document.getElementById('customAspectH').value || '1';
+            return normalizeClientAspectRatio(`${width}:${height}`);
+        }
+
+        function getGenerationSize(aspectRatio) {
+            const [width, height] = normalizeClientAspectRatio(aspectRatio).split(':').map(Number);
+            const ratio = width / height;
+            if (Math.abs(ratio - 1) < 0.08) return '1024x1024';
+            return ratio > 1 ? '1792x1024' : '1024x1792';
+        }
+
+        function splitPromptSections(text) {
+            const clean = String(text || '').replace(/\r/g, '').trim();
+            const negativeMatch = clean.match(/(?:^|\n)\s*NEGATIVE(?:\s+PROMPT)?\s*:\s*([\s\S]*)$/i);
+            const promptText = negativeMatch ? clean.slice(0, negativeMatch.index).trim() : clean;
+            return {
+                prompt: promptText.replace(/^\s*MASTER\s+PROMPT\s*:\s*/i, '').trim(),
+                negative: negativeMatch ? negativeMatch[1].trim() : ''
+            };
+        }
+
+        function buildCreativeMasterPrompt(fields) {
+            const subject = fields.subject || 'A visually striking main subject with a memorable silhouette and expressive details';
+            const activity = fields.activity || 'captured at the most cinematic moment of the scene';
+            const location = fields.location || 'inside a richly layered environment with foreground, midground, and background depth';
+            const style = fields.style || 'premium cinematic concept art with refined art direction';
+            const lighting = fields.light || 'dramatic motivated lighting with soft highlights, realistic shadows, and atmospheric depth';
+            const mood = fields.mood || 'immersive, emotionally engaging, mysterious, and awe-inspiring';
+            const colors = fields.color || 'balanced color harmony with strong contrast, subtle accent colors, and polished grading';
+            const camera = fields.cam || 'carefully composed camera angle, strong focal point, depth of field, and dynamic framing';
+
+            let technical = fields.tech || 'ultra detailed, sharp focus, clean edges, high dynamic range, professional finish';
+            let extraNegative = '';
+            const negativeFromTech = technical.match(/negative prompt\s*:\s*([\s\S]*)/i);
+            if (negativeFromTech) {
+                extraNegative = negativeFromTech[1].trim();
+                technical = 'clean professional rendering, artifact-free finish, polished image quality';
+            }
+
+            const master = [
+                `MASTER PROMPT:\n${subject} ${activity} ${location}.`,
+                `Develop the scene with a clear visual story: a strong focal subject, readable silhouette, purposeful gesture, layered environment details, and small believable textures that reward close inspection.`,
+                `${style}, ${lighting}, ${mood}.`,
+                `Use ${colors}; ${camera}.`,
+                `Add cinematic depth, realistic material detail, atmospheric perspective, refined composition, premium editorial polish, and a distinct creative hook so the image feels original rather than generic.`,
+                `${technical}.`
+            ].join(' ');
+
+            const negative = [defaultNegativePrompt, extraNegative].filter(Boolean).join(', ');
+            return `${master}\n\nNEGATIVE:\n${negative}`;
+        }
+
+        function setDirectPromptFromText(text) {
+            const parsed = splitPromptSections(text);
+            const promptInput = document.getElementById('directPrompt');
+            const negativeInput = document.getElementById('directNegative');
+            if (promptInput) promptInput.value = parsed.prompt;
+            if (negativeInput && parsed.negative) negativeInput.value = parsed.negative;
+        }
+
+        const aspectSelect = document.getElementById('directAspectRatio');
+        const customAspectWrap = document.getElementById('customAspectWrap');
+        aspectSelect.addEventListener('change', () => {
+            customAspectWrap.classList.toggle('hidden', aspectSelect.value !== 'custom');
+        });
+
+        document.getElementById('magicKeywords').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                document.getElementById('btnMagicGenerate').click();
+            }
+        });
+
+        document.getElementById('btnMagicGenerate').addEventListener('click', async () => {
+            const keywords = document.getElementById('magicKeywords').value.trim();
+            const btn = document.getElementById('btnMagicGenerate');
+            if (keywords.length < 2) return showToast('Masukkan minimal 1 keyword.', 'warning');
+
+            btn.disabled = true;
+            btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Expanding...`;
+
+            try {
+                const response = await fetch('/api/ai/magic-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ keywords })
+                });
+                const data = await response.json();
+
+                if (!data.success) {
+                    showToast(data.error || 'Magic Expand gagal.', 'error');
+                    return;
+                }
+
+                const fullPrompt = data.prompt || '';
+                document.getElementById('resultPrompt').value = fullPrompt;
+                window.currentPrompt = fullPrompt;
+                document.getElementById('outputContainer').classList.remove('hidden');
+                setDirectPromptFromText(fullPrompt);
+                await savePromptHistory(fullPrompt);
+                showToast('Magic prompt ready!', 'success');
+            } catch (error) {
+                showToast('Magic Expand error.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="ti ti-sparkles"></i> Magic Expand`;
+            }
+        });
+
         // Logic Builder
         document.getElementById('btnGeneratePrompt').addEventListener('click', () => {
             const subject = document.getElementById('subject').value.trim();
@@ -310,56 +471,67 @@
             const cam = document.getElementById('camera').value.trim();
             const tech = document.getElementById('technical').value.trim();
 
-            let parts = [];
-            let core = subject || 'A concept';
-            if (activity) core += ' ' + activity;
-            if (location) core += ' ' + location;
-            parts.push(core);
-
-            if (style) parts.push(style);
-            if (light) parts.push(light);
-            if (mood) parts.push(mood);
-            if (color) parts.push(color);
-            if (cam) parts.push(cam);
-            if (tech) parts.push(tech);
-
-            let fullPrompt = parts.filter(p => p.length > 0).join(', ');
-            fullPrompt = fullPrompt.replace(/\s+/g, ' ').trim();
+            const fullPrompt = buildCreativeMasterPrompt({ subject, activity, location, style, light, mood, color, cam, tech });
 
             document.getElementById('resultPrompt').value = fullPrompt;
             window.currentPrompt = fullPrompt;
             document.getElementById('outputContainer').classList.remove('hidden');
+            setDirectPromptFromText(fullPrompt);
             savePromptHistory(fullPrompt);
         });
 
+        document.getElementById('btnClear').addEventListener('click', () => {
+            ['magicKeywords', 'subject', 'activity', 'location', 'artstyle', 'lighting', 'mood', 'colors', 'camera', 'technical', 'resultPrompt'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            document.querySelectorAll('#studio-builder select').forEach(select => {
+                select.selectedIndex = 0;
+            });
+            document.getElementById('outputContainer').classList.add('hidden');
+        });
+
         window.generateDirectImage = async function() {
-            const prompt = document.getElementById('directPrompt').value.trim();
-            const negative = document.getElementById('directNegative').value.trim();
-            const size = document.getElementById('directSize').value;
+            const directText = document.getElementById('directPrompt').value.trim();
+            const parsedDirect = splitPromptSections(directText);
+            const prompt = parsedDirect.prompt;
+            const negative = document.getElementById('directNegative').value.trim() || parsedDirect.negative;
+            const aspectRatio = getSelectedAspectRatio();
+            const size = getGenerationSize(aspectRatio);
+            const count = Math.min(Math.max(parseInt(document.getElementById('directCount').value, 10) || 1, 1), 5);
             const btn = document.getElementById('btnDirectGenerate');
 
             if (!prompt) return showToast('Enter prompt.', 'warning');
 
             btn.disabled = true;
-            btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Generating...`;
+            btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Generating ${count}...`;
 
             try {
-                const finalPrompt = negative ? `${prompt} [Negative: ${negative}]` : prompt;
                 const response = await fetch('/api/ai/generate-image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: finalPrompt, size })
+                    body: JSON.stringify({ prompt, negativePrompt: negative, size, aspectRatio, count })
                 });
 
                 const data = await response.json();
                 if (data.success) {
-                    addResultToGallery(data.imageUrl, prompt);
-                    showToast('Generated!', 'success');
-                    fetch('/api/ai/save-history', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt, imageUrl: data.imageUrl })
-                    });
+                    const images = Array.isArray(data.images) && data.images.length
+                        ? data.images
+                        : (data.imageUrls || [data.imageUrl]).filter(Boolean).map(imageUrl => ({ imageUrl, aspectRatio, resolution: null }));
+
+                    const historyPrompt = negative ? `${prompt}\n\nNEGATIVE:\n${negative}` : prompt;
+                    const historyId = await savePromptHistory(historyPrompt, images[0]?.imageUrl || null);
+                    images.forEach(image => addResultToGallery(image.imageUrl, prompt, {
+                        aspectRatio: image.aspectRatio || aspectRatio,
+                        resolution: image.resolution,
+                        historyId
+                    }));
+
+                    if (data.warnings && data.warnings.length) {
+                        showToast(`Generated with ${data.warnings.length} warning(s).`, 'warning');
+                    } else {
+                        showToast(`Generated ${images.length} image${images.length > 1 ? 's' : ''}!`, 'success');
+                    }
                 } else {
                     showToast(data.error || 'Failed.', 'error');
                 }
@@ -371,34 +543,154 @@
             }
         };
 
-        function addResultToGallery(url, prompt) {
+        function addResultToGallery(url, prompt, meta = {}) {
             const gallery = document.getElementById('resultsGallery');
             const grid = document.getElementById('galleryGrid');
             gallery.classList.remove('hidden');
             
             const item = document.createElement('div');
             item.className = 'gallery-item group animate-in zoom-in duration-500';
+            item.style.setProperty('--result-aspect-ratio', (meta.aspectRatio || '1:1').replace(':', ' / '));
             item.innerHTML = `
-                <img src="${url}" class="w-full h-64 object-cover cursor-pointer transition-transform duration-700 group-hover:scale-110" onclick="viewImage('${url}')">
-                <div class="gallery-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-all flex flex-col justify-end p-6">
-                    <p class="text-[10px] text-gray-200 line-clamp-2 mb-4 font-bold italic">"${prompt}"</p>
+                <div class="result-preview-frame relative bg-dark-900 overflow-hidden">
+                    <div class="absolute inset-0 flex items-center justify-center text-gray-600 text-[10px] font-bold uppercase tracking-widest result-loading">
+                        Loading Preview
+                    </div>
+                    <img class="w-full h-full object-contain cursor-pointer transition-all duration-700 group-hover:scale-[1.03] opacity-0" alt="Generated image preview">
+                </div>
+                <div class="gallery-overlay absolute inset-0 opacity-0 group-hover:opacity-100 transition-all flex flex-col justify-end p-5">
+                    <p class="text-[10px] text-gray-200 line-clamp-2 mb-4 font-bold italic"></p>
                     <div class="flex gap-2 transform translate-y-4 group-hover:translate-y-0 transition-transform">
-                        <button onclick="downloadDirect('${url}')" class="flex-1 bg-white text-dark-900 text-[9px] font-black py-3 rounded-xl transition-all">Save</button>
-                        <button onclick="saveToGalleryDirect('${url}')" class="flex-1 bg-primary text-white text-[9px] font-black py-3 rounded-xl transition-all">Add</button>
+                        <button type="button" class="download-result flex-1 bg-white text-dark-900 text-[9px] font-black py-3 rounded-xl transition-all">Download</button>
+                        <button type="button" class="gallery-save-result flex-1 bg-primary text-white text-[9px] font-black py-3 rounded-xl transition-all">Gallery</button>
                     </div>
                 </div>
             `;
+            const image = item.querySelector('img');
+            const loading = item.querySelector('.result-loading');
+            const caption = item.querySelector('p');
+            image.onload = () => {
+                image.classList.remove('opacity-0');
+                loading.classList.add('hidden');
+            };
+            image.onerror = () => {
+                loading.textContent = 'Preview failed';
+                loading.classList.remove('text-gray-600');
+                loading.classList.add('text-red-400');
+            };
+            image.src = url;
+            image.addEventListener('click', () => viewImage(url));
+            caption.textContent = `"${prompt}"`;
+            item.querySelector('.download-result').addEventListener('click', () => downloadDirect(url, prompt));
+            item.querySelector('.gallery-save-result').addEventListener('click', () => saveToGalleryDirect(url, prompt, meta.historyId, meta.resolution));
             grid.prepend(item);
         }
 
-        async function savePromptHistory(prompt) {
+        window.downloadDirect = async function(url, promptText = 'ai-generated-image') {
             try {
-                await fetch('/api/ai/save-history', {
+                const response = await fetch('/api/ai/download-image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt })
+                    body: JSON.stringify({ imageUrl: url, filename: promptText })
                 });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Download failed');
+                }
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = 'ai-generated-image.png';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(blobUrl);
+                showToast('Download started.', 'success');
+            } catch (error) {
+                showToast(error.message || 'Download failed.', 'error');
+            }
+        };
+
+        window.saveToGalleryDirect = async function(url, promptText = '', historyId = null, resolution = null) {
+            try {
+                const response = await fetch('/api/ai/save-to-gallery', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageUrl: url, prompt: promptText, historyId, resolution })
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    showToast(data.error || 'Failed to save image.', 'error');
+                    return;
+                }
+                showToast('Saved to Gallery.', 'success');
+            } catch (error) {
+                showToast('Failed to save image.', 'error');
+            }
+        };
+
+        async function savePromptHistory(prompt, imageUrl = null) {
+            try {
+                const response = await fetch('/api/ai/save-history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, imageUrl })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (data.id) prependHistoryCard(data.id, prompt, imageUrl);
+                return data.id || null;
             } catch (e) {}
+            return null;
+        }
+
+        function prependHistoryCard(id, prompt, imageUrl = null) {
+            const grid = document.getElementById('historyGrid');
+            if (!grid) return;
+
+            const empty = document.getElementById('historyEmptyState');
+            if (empty) empty.remove();
+
+            const card = document.createElement('div');
+            card.className = 'bg-dark-900/50 rounded-2xl border border-gray-700/30 p-5 hover:border-primary/40 transition-all group relative';
+
+            if (imageUrl) {
+                const previewButton = document.createElement('button');
+                previewButton.type = 'button';
+                previewButton.className = 'w-full overflow-hidden rounded-xl bg-dark-800 border border-gray-700/30 mb-4 block';
+                const previewImg = document.createElement('img');
+                previewImg.src = imageUrl;
+                previewImg.alt = 'Generated image preview';
+                previewImg.loading = 'lazy';
+                previewImg.className = 'w-full h-36 object-cover';
+                previewButton.appendChild(previewImg);
+                previewButton.addEventListener('click', () => viewImage(imageUrl));
+                card.appendChild(previewButton);
+            }
+
+            const text = document.createElement('p');
+            text.className = 'text-[11px] text-gray-300 line-clamp-3 leading-relaxed italic mb-5';
+            text.textContent = `"${prompt}"`;
+            card.appendChild(text);
+
+            const footer = document.createElement('div');
+            footer.className = 'flex items-center justify-between pt-4 border-t border-gray-700/20';
+            footer.innerHTML = `
+                <span class="text-[9px] text-gray-600 font-bold tracking-tighter">${new Date().toLocaleString()}</span>
+                <div class="flex gap-2">
+                    <button type="button" class="history-copy w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Copy Text"><i class="ti ti-copy text-sm"></i></button>
+                    <button type="button" class="history-reuse w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-primary/20 text-gray-500 hover:text-primary rounded-xl transition-all" title="Use as Prompt"><i class="ti ti-refresh text-sm"></i></button>
+                    <button type="button" class="history-delete w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-xl transition-all" title="Delete"><i class="ti ti-trash text-sm"></i></button>
+                </div>
+            `;
+            card.appendChild(footer);
+            card.querySelector('.history-copy').addEventListener('click', function() { copyRawPrompt(this, prompt); });
+            card.querySelector('.history-reuse').addEventListener('click', () => reusePrompt(prompt));
+            card.querySelector('.history-delete').addEventListener('click', () => deleteHistory(id));
+
+            grid.prepend(card);
+            const count = document.getElementById('historyCount');
+            if (count) count.textContent = String((parseInt(count.textContent, 10) || 0) + 1);
         }
 
         window.copyRawPrompt = function(btn, text) {
@@ -412,8 +704,7 @@
         };
 
         window.reusePrompt = function(text) {
-            const dp = document.getElementById('directPrompt');
-            if(dp) dp.value = text;
+            setDirectPromptFromText(text);
             switchStudioTab('generate');
             showToast('Prompt loaded!', 'info');
         };
@@ -495,6 +786,10 @@
         transition: all 0.5s ease;
     }
     .gallery-item:hover { transform: translateY(-5px); border-color: #3b82f6; }
+    .result-preview-frame {
+        aspect-ratio: var(--result-aspect-ratio, 1 / 1);
+        min-height: 12rem;
+    }
     .gallery-overlay { background: linear-gradient(to top, rgba(2, 6, 23, 0.98) 0%, rgba(2, 6, 23, 0.4) 100%); }
     select {
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");

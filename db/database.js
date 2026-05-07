@@ -421,7 +421,20 @@ function createTables() {
           if (err && !err.message.includes('already exists')) {
             console.error('Error creating ai_prompt_history table:', err.message);
           }
-          resolve();
+          const migrations = [
+            ['image_url', 'TEXT'],
+            ['saved_video_id', 'TEXT']
+          ];
+          let remaining = migrations.length;
+          migrations.forEach(([column, type]) => {
+            db.run(`ALTER TABLE ai_prompt_history ADD COLUMN ${column} ${type}`, (alterErr) => {
+              if (alterErr && !alterErr.message.includes('duplicate column name')) {
+                console.error(`Error adding ${column} column to ai_prompt_history:`, alterErr.message);
+              }
+              remaining -= 1;
+              if (remaining === 0) resolve();
+            });
+          });
         });
       });
     });
