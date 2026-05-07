@@ -161,7 +161,7 @@ function isImageFile(filepath) {
 
 function normalizeAspectRatio(value) {
   if (!value || typeof value !== 'string') return '1:1';
-  const match = value.trim().match(/^(\d{1,2})\s*[:/x]\s*(\d{1,2})$/i);
+  const match = value.trim().match(/^(\d{1,3})\s*[:/x]\s*(\d{1,3})$/i);
   if (!match) return '1:1';
 
   const width = parseInt(match[1], 10);
@@ -169,7 +169,7 @@ function normalizeAspectRatio(value) {
   if (!width || !height) return '1:1';
 
   const ratio = width / height;
-  if (ratio < 0.25 || ratio > 4) return '1:1';
+  if (ratio < 0.2 || ratio > 5) return '1:1';
 
   const divisor = gcd(width, height);
   return `${width / divisor}:${height / divisor}`;

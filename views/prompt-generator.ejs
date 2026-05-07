@@ -1,29 +1,29 @@
 <% layout('layout') -%>
 
-<div class="container mx-auto px-4 py-8 max-w-[1400px]">
+<div class="container mx-auto px-3 sm:px-4 py-5 sm:py-8 max-w-[1400px]">
     <!-- Header Section -->
-    <div class="flex items-center gap-4 mb-8">
-        <div class="w-12 h-12 bg-primary/20 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/10 border border-primary/20">
+    <div class="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-8">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 bg-primary/20 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/10 border border-primary/20">
             <i class="ti ti-sparkles text-primary text-2xl animate-pulse"></i>
         </div>
-        <div>
-            <h1 class="text-2xl font-black text-white tracking-tight">AI Prompt Studio</h1>
-            <p class="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold">Creative Generation Suite</p>
+        <div class="min-w-0">
+            <h1 class="text-xl sm:text-2xl font-black text-white tracking-tight">AI Prompt Studio</h1>
+            <p class="text-[9px] sm:text-[10px] text-gray-500 uppercase tracking-[0.2em] sm:tracking-[0.3em] font-bold truncate">Creative Generation Suite</p>
         </div>
     </div>
 
     <!-- Main Studio Container -->
-    <div class="bg-dark-800 rounded-3xl border border-gray-700/30 shadow-2xl overflow-hidden flex flex-col min-h-[600px]">
+    <div class="bg-dark-800 rounded-2xl sm:rounded-3xl border border-gray-700/30 shadow-2xl overflow-hidden flex flex-col min-h-[600px]">
         <!-- Minimal Tabs (3 Tabs Now) -->
-        <div class="p-3 bg-dark-900/60 border-b border-gray-700/30 flex justify-between items-center">
-            <div class="flex bg-dark-700/50 p-1 rounded-xl">
-                <button onclick="switchStudioTab('builder')" id="tab-builder" class="studio-tab active flex items-center gap-2 px-6 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap">
+        <div class="p-3 bg-dark-900/60 border-b border-gray-700/30 flex flex-col md:flex-row gap-3 md:justify-between md:items-center">
+            <div class="studio-tab-list flex w-full md:w-auto overflow-x-auto bg-dark-700/50 p-1 rounded-xl">
+                <button onclick="switchStudioTab('builder')" id="tab-builder" class="studio-tab active flex flex-1 md:flex-none justify-center items-center gap-2 min-w-[8.5rem] px-4 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap">
                     <i class="ti ti-wand text-xs"></i> Prompt Builder
                 </button>
-                <button onclick="switchStudioTab('generate')" id="tab-generate" class="studio-tab flex items-center gap-2 px-6 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all text-gray-500 hover:text-gray-300 whitespace-nowrap">
+                <button onclick="switchStudioTab('generate')" id="tab-generate" class="studio-tab flex flex-1 md:flex-none justify-center items-center gap-2 min-w-[8.5rem] px-4 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all text-gray-500 hover:text-gray-300 whitespace-nowrap">
                     <i class="ti ti-photo text-xs"></i> Generate Image
                 </button>
-                <button onclick="switchStudioTab('history')" id="tab-history" class="studio-tab flex items-center gap-2 px-6 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all text-gray-500 hover:text-gray-300 whitespace-nowrap">
+                <button onclick="switchStudioTab('history')" id="tab-history" class="studio-tab flex flex-1 md:flex-none justify-center items-center gap-2 min-w-[6.5rem] px-4 sm:px-10 py-2.5 rounded-lg text-[11px] font-bold transition-all text-gray-500 hover:text-gray-300 whitespace-nowrap">
                     <i class="ti ti-history text-xs"></i> History
                 </button>
             </div>
@@ -33,14 +33,14 @@
             </div>
         </div>
 
-        <div class="flex-1 p-6 overflow-y-auto custom-scrollbar">
+        <div class="flex-1 p-4 sm:p-6 overflow-y-auto custom-scrollbar">
             <!-- Tab 1: Prompt Builder -->
             <div id="studio-builder" class="studio-content space-y-8">
                 <!-- Magic Section -->
                 <div class="bg-primary/5 rounded-2xl p-4 border border-primary/10 max-w-2xl">
                     <div class="flex flex-col sm:flex-row gap-3">
                         <input type="text" id="magicKeywords" class="flex-1 bg-dark-900/80 border border-gray-700 rounded-xl px-5 py-3 text-[12px] text-white focus:ring-1 focus:ring-primary transition-all placeholder-gray-600" placeholder="Keywords for Magic Expand...">
-                        <button id="btnMagicGenerate" class="bg-primary hover:bg-secondary text-dark-900 text-[11px] font-bold px-8 py-3 rounded-xl transition-all flex items-center gap-2">
+                        <button id="btnMagicGenerate" class="bg-primary hover:bg-secondary text-dark-900 text-[11px] font-bold px-8 py-3 rounded-xl transition-all flex items-center justify-center gap-2">
                             <i class="ti ti-sparkles"></i> Magic Expand
                         </button>
                     </div>
@@ -48,6 +48,47 @@
 
                 <!-- Master Formula -->
                 <div class="space-y-6">
+                    <div class="bg-dark-900/30 rounded-2xl border border-gray-700/20 p-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="space-y-2">
+                                <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest px-1">Social Format</label>
+                                <select id="builderSocialFormat" class="social-format-select w-full bg-dark-900 border border-gray-700/50 rounded-xl px-3 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                    <option value="" data-aspect="" data-context="">General Image</option>
+                                    <option value="youtube_thumbnail" data-aspect="16:9" data-context="YouTube thumbnail cover, clickable high-retention composition, bold readable focal point, strong emotion, clear foreground subject, leave clean negative space for title placement but do not add text unless requested">YouTube Thumbnail 16:9</option>
+                                    <option value="shorts_cover" data-aspect="9:16" data-context="vertical short-form video cover for YouTube Shorts, TikTok, and Instagram Reels, strong center subject, top-safe and bottom-safe composition, instant hook in the first glance">Shorts / TikTok / Reels 9:16</option>
+                                    <option value="instagram_square" data-aspect="1:1" data-context="Instagram feed square post, balanced centered composition, scroll-stopping visual clarity, premium social media editorial finish">Instagram Square 1:1</option>
+                                    <option value="instagram_portrait" data-aspect="4:5" data-context="Instagram portrait feed or carousel cover, vertical editorial crop, subject framed for mobile feed, high clarity at small size">Instagram Portrait 4:5</option>
+                                    <option value="social_banner" data-aspect="191:100" data-context="social media link preview or cover banner, wide 1.91:1 crop, strong left-to-right composition, clean center focus, readable as a header image">Social Banner 1.91:1</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest px-1">Category</label>
+                                <select id="builderContentCategory" class="w-full bg-dark-900 border border-gray-700/50 rounded-xl px-3 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                    <option value="">General Creative</option>
+                                    <option value="product launch, advertising visual, clear product hero, premium commercial styling">Product Promo</option>
+                                    <option value="gaming content cover, energetic action, dramatic character pose, high-impact thumbnail readability">Gaming</option>
+                                    <option value="music artwork cover, emotional atmosphere, memorable visual identity, album-art quality">Music Cover</option>
+                                    <option value="education and tutorial cover, clear concept visualization, trustworthy and clean information design">Education / Tutorial</option>
+                                    <option value="lifestyle and travel social content, aspirational mood, authentic scene, polished creator aesthetic">Lifestyle / Travel</option>
+                                    <option value="food and beverage social content, appetizing texture, fresh highlights, premium close-up styling">Food / Beverage</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest px-1">Theme</label>
+                                <select id="builderContentTheme" class="w-full bg-dark-900 border border-gray-700/50 rounded-xl px-3 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                    <option value="">Auto Theme</option>
+                                    <option value="viral cinematic, dramatic contrast, big visual hook, premium color grade">Viral Cinematic</option>
+                                    <option value="clean minimal, elegant spacing, refined modern layout, premium simplicity">Clean Minimal</option>
+                                    <option value="luxury premium, elegant materials, refined highlights, aspirational mood">Luxury Premium</option>
+                                    <option value="dark dramatic, deep shadows, intense mood, powerful contrast">Dark Dramatic</option>
+                                    <option value="bright colorful, playful energy, vibrant contrast, optimistic social pop">Bright Colorful</option>
+                                    <option value="cozy natural, warm atmosphere, authentic textures, soft realistic light">Cozy Natural</option>
+                                    <option value="tech futuristic, sleek surfaces, luminous accents, advanced digital atmosphere">Tech Futuristic</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <% ['Subject', 'Activity', 'Location'].forEach(field => { %>
                             <div class="space-y-2">
@@ -169,7 +210,7 @@
                         </div>
                     </div>
 
-                    <div class="flex gap-3 pt-4">
+                    <div class="flex flex-col sm:flex-row gap-3 pt-4">
                         <button id="btnGeneratePrompt" class="flex-1 bg-primary hover:bg-secondary text-dark-900 text-[11px] font-bold py-4 rounded-xl transition-all shadow-lg shadow-primary/10">Build Master Prompt</button>
                         <button id="btnClear" class="bg-dark-700 hover:bg-dark-600 text-gray-400 text-[11px] px-8 py-4 rounded-xl transition-all">Clear All</button>
                     </div>
@@ -192,6 +233,45 @@
             <div id="studio-generate" class="studio-content hidden animate-in fade-in duration-300">
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     <div class="lg:col-span-8 space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div class="space-y-2">
+                                <label class="block text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] px-1">Social Format</label>
+                                <select id="directSocialFormat" class="social-format-select w-full bg-dark-900 border border-gray-700/50 rounded-xl px-4 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                    <option value="" data-aspect="" data-context="">General Image</option>
+                                    <option value="youtube_thumbnail" data-aspect="16:9" data-context="YouTube thumbnail cover, clickable high-retention composition, bold readable focal point, strong emotion, clear foreground subject, leave clean negative space for title placement but do not add text unless requested">YouTube Thumbnail</option>
+                                    <option value="shorts_cover" data-aspect="9:16" data-context="vertical short-form video cover for YouTube Shorts, TikTok, and Instagram Reels, strong center subject, top-safe and bottom-safe composition, instant hook in the first glance">Shorts / TikTok / Reels</option>
+                                    <option value="instagram_square" data-aspect="1:1" data-context="Instagram feed square post, balanced centered composition, scroll-stopping visual clarity, premium social media editorial finish">Instagram Square</option>
+                                    <option value="instagram_portrait" data-aspect="4:5" data-context="Instagram portrait feed or carousel cover, vertical editorial crop, subject framed for mobile feed, high clarity at small size">Instagram Portrait</option>
+                                    <option value="social_banner" data-aspect="191:100" data-context="social media link preview or cover banner, wide 1.91:1 crop, strong left-to-right composition, clean center focus, readable as a header image">Social Banner</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] px-1">Category</label>
+                                <select id="directContentCategory" class="w-full bg-dark-900 border border-gray-700/50 rounded-xl px-4 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                    <option value="">General Creative</option>
+                                    <option value="product launch, advertising visual, clear product hero, premium commercial styling">Product Promo</option>
+                                    <option value="gaming content cover, energetic action, dramatic character pose, high-impact thumbnail readability">Gaming</option>
+                                    <option value="music artwork cover, emotional atmosphere, memorable visual identity, album-art quality">Music Cover</option>
+                                    <option value="education and tutorial cover, clear concept visualization, trustworthy and clean information design">Education / Tutorial</option>
+                                    <option value="lifestyle and travel social content, aspirational mood, authentic scene, polished creator aesthetic">Lifestyle / Travel</option>
+                                    <option value="food and beverage social content, appetizing texture, fresh highlights, premium close-up styling">Food / Beverage</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] px-1">Theme</label>
+                                <select id="directContentTheme" class="w-full bg-dark-900 border border-gray-700/50 rounded-xl px-4 py-3 text-[11px] text-white focus:ring-1 focus:ring-primary appearance-none cursor-pointer custom-scrollbar">
+                                    <option value="">Auto Theme</option>
+                                    <option value="viral cinematic, dramatic contrast, big visual hook, premium color grade">Viral Cinematic</option>
+                                    <option value="clean minimal, elegant spacing, refined modern layout, premium simplicity">Clean Minimal</option>
+                                    <option value="luxury premium, elegant materials, refined highlights, aspirational mood">Luxury Premium</option>
+                                    <option value="dark dramatic, deep shadows, intense mood, powerful contrast">Dark Dramatic</option>
+                                    <option value="bright colorful, playful energy, vibrant contrast, optimistic social pop">Bright Colorful</option>
+                                    <option value="cozy natural, warm atmosphere, authentic textures, soft realistic light">Cozy Natural</option>
+                                    <option value="tech futuristic, sleek surfaces, luminous accents, advanced digital atmosphere">Tech Futuristic</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="space-y-3">
                             <label class="block text-[9px] font-bold text-gray-600 uppercase tracking-[0.2em] px-1">Describe Your Vision</label>
                             <textarea id="directPrompt" class="w-full bg-dark-900 border border-gray-700/50 rounded-2xl p-6 text-[13px] text-white placeholder-gray-600 focus:ring-1 focus:ring-primary h-[180px] custom-scrollbar resize-none shadow-inner" placeholder="Visualize your masterpiece..."></textarea>
@@ -203,7 +283,7 @@
                     </div>
                     
                     <div class="lg:col-span-4 space-y-6">
-                        <div class="bg-dark-900/80 p-6 rounded-3xl border border-gray-700/30 space-y-8">
+                        <div class="bg-dark-900/80 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-700/30 space-y-6 sm:space-y-8">
                             <div>
                                 <label class="block text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">Aspect Ratio</label>
                                 <select id="directAspectRatio" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-4 px-4 text-[11px] text-white appearance-none cursor-pointer hover:bg-dark-600 transition-colors">
@@ -214,12 +294,13 @@
                                     <option value="3:4">Portrait (3:4)</option>
                                     <option value="4:3">Landscape (4:3)</option>
                                     <option value="21:9">Wide (21:9)</option>
+                                    <option value="191:100">Social Banner (1.91:1)</option>
                                     <option value="custom">Custom</option>
                                 </select>
                                 <div id="customAspectWrap" class="hidden grid grid-cols-[1fr_auto_1fr] gap-2 items-center mt-3">
-                                    <input type="number" id="customAspectW" min="1" max="32" value="4" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-3 px-4 text-[11px] text-white focus:ring-1 focus:ring-primary">
+                                    <input type="number" id="customAspectW" min="1" max="300" value="4" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-3 px-4 text-[11px] text-white focus:ring-1 focus:ring-primary">
                                     <span class="text-gray-500 text-xs font-black">:</span>
-                                    <input type="number" id="customAspectH" min="1" max="32" value="5" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-3 px-4 text-[11px] text-white focus:ring-1 focus:ring-primary">
+                                    <input type="number" id="customAspectH" min="1" max="300" value="5" class="w-full bg-dark-700 border border-gray-600 rounded-xl py-3 px-4 text-[11px] text-white focus:ring-1 focus:ring-primary">
                                 </div>
                             </div>
                             <div>
@@ -249,7 +330,7 @@
 
             <!-- Tab 3: History (Dedicated Tab) -->
             <div id="studio-history" class="studio-content hidden animate-in slide-in-from-bottom-4 duration-300">
-                <div class="flex items-center justify-between mb-8">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
                     <div class="flex items-center gap-3">
                         <div class="w-1 h-6 bg-primary rounded-full"></div>
                         <h3 class="text-[11px] font-black text-gray-400 uppercase tracking-[0.4em]">Prompt History</h3>
@@ -353,13 +434,13 @@
         }
 
         function normalizeClientAspectRatio(value) {
-            const match = String(value || '1:1').match(/^(\d{1,2})\s*[:/x]\s*(\d{1,2})$/i);
+            const match = String(value || '1:1').match(/^(\d{1,3})\s*[:/x]\s*(\d{1,3})$/i);
             if (!match) return '1:1';
             const width = parseInt(match[1], 10);
             const height = parseInt(match[2], 10);
             if (!width || !height) return '1:1';
             const ratio = width / height;
-            if (ratio < 0.25 || ratio > 4) return '1:1';
+            if (ratio < 0.2 || ratio > 5) return '1:1';
             const divisor = gcdClient(width, height);
             return `${width / divisor}:${height / divisor}`;
         }
@@ -389,6 +470,71 @@
             };
         }
 
+        function getSelectedOption(select) {
+            return select && select.options ? select.options[select.selectedIndex] : null;
+        }
+
+        function getSocialPromptContext(scope) {
+            const formatSelect = document.getElementById(`${scope}SocialFormat`);
+            const categorySelect = document.getElementById(`${scope}ContentCategory`);
+            const themeSelect = document.getElementById(`${scope}ContentTheme`);
+            const formatOption = getSelectedOption(formatSelect);
+            const category = categorySelect?.value || '';
+            const theme = themeSelect?.value || '';
+            const aspectRatio = normalizeClientAspectRatio(formatOption?.dataset.aspect || '');
+            const formatContext = formatOption?.dataset.context || '';
+            const formatLabel = formatOption?.textContent?.trim() || '';
+            const promptParts = [];
+
+            if (formatContext) {
+                promptParts.push(`Social media target: ${formatLabel}. ${formatContext}. Compose specifically for ${aspectRatio} aspect ratio.`);
+            }
+            if (category) {
+                promptParts.push(`Content category: ${category}.`);
+            }
+            if (theme) {
+                promptParts.push(`Theme direction: ${theme}.`);
+            }
+
+            return {
+                aspectRatio: formatOption?.dataset.aspect ? aspectRatio : '',
+                promptContext: promptParts.join(' ')
+            };
+        }
+
+        function buildPromptWithSocialContext(prompt, socialContext) {
+            if (!socialContext?.promptContext) return prompt;
+            return `${prompt}\n\nSOCIAL MEDIA CREATIVE DIRECTION:\n${socialContext.promptContext}\nMake the final image instantly readable on mobile, with a strong focal point, clear crop-safe composition, and no unwanted text, watermark, logo, or UI elements.`;
+        }
+
+        function setSelectValue(selectId, value) {
+            const select = document.getElementById(selectId);
+            if (!select || !value) return;
+            const option = Array.from(select.options).find(item => item.value === value);
+            if (option) select.value = value;
+        }
+
+        function syncSocialFormatAspect(scope) {
+            const social = getSocialPromptContext(scope);
+            if (!social.aspectRatio) return;
+
+            if (scope === 'direct') {
+                setSelectValue('directAspectRatio', social.aspectRatio);
+                document.getElementById('customAspectWrap').classList.add('hidden');
+            }
+        }
+
+        function copyBuilderSocialToDirect() {
+            ['SocialFormat', 'ContentCategory', 'ContentTheme'].forEach(suffix => {
+                const source = document.getElementById(`builder${suffix}`);
+                const target = document.getElementById(`direct${suffix}`);
+                if (source && target) {
+                    target.value = source.value;
+                }
+            });
+            syncSocialFormatAspect('direct');
+        }
+
         function buildCreativeMasterPrompt(fields) {
             const subject = fields.subject || 'A visually striking main subject with a memorable silhouette and expressive details';
             const activity = fields.activity || 'captured at the most cinematic moment of the scene';
@@ -407,14 +553,19 @@
                 technical = 'clean professional rendering, artifact-free finish, polished image quality';
             }
 
+            const socialDirection = fields.socialContext?.promptContext
+                ? `Social media creative direction: ${fields.socialContext.promptContext} Design the image to stay readable as a thumbnail or cover on mobile screens, with crop-safe composition and a clear visual hierarchy.`
+                : '';
+
             const master = [
                 `MASTER PROMPT:\n${subject} ${activity} ${location}.`,
                 `Develop the scene with a clear visual story: a strong focal subject, readable silhouette, purposeful gesture, layered environment details, and small believable textures that reward close inspection.`,
+                socialDirection,
                 `${style}, ${lighting}, ${mood}.`,
                 `Use ${colors}; ${camera}.`,
                 `Add cinematic depth, realistic material detail, atmospheric perspective, refined composition, premium editorial polish, and a distinct creative hook so the image feels original rather than generic.`,
                 `${technical}.`
-            ].join(' ');
+            ].filter(Boolean).join(' ');
 
             const negative = [defaultNegativePrompt, extraNegative].filter(Boolean).join(', ');
             return `${master}\n\nNEGATIVE:\n${negative}`;
@@ -438,6 +589,7 @@
         aspectSelect.addEventListener('change', () => {
             customAspectWrap.classList.toggle('hidden', aspectSelect.value !== 'custom');
         });
+        document.getElementById('directSocialFormat').addEventListener('change', () => syncSocialFormatAspect('direct'));
 
         document.getElementById('magicKeywords').addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -450,6 +602,8 @@
             const keywords = document.getElementById('magicKeywords').value.trim();
             const btn = document.getElementById('btnMagicGenerate');
             if (keywords.length < 2) return showToast('Masukkan minimal 1 keyword.', 'warning');
+            const socialContext = getSocialPromptContext('builder');
+            const magicInput = buildPromptWithSocialContext(keywords, socialContext);
 
             btn.disabled = true;
             btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Expanding...`;
@@ -458,7 +612,7 @@
                 const response = await fetch('/api/ai/magic-prompt', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ keywords })
+                    body: JSON.stringify({ keywords: magicInput })
                 });
                 const data = await response.json();
 
@@ -471,6 +625,7 @@
                 document.getElementById('resultPrompt').value = fullPrompt;
                 window.currentPrompt = fullPrompt;
                 document.getElementById('outputContainer').classList.remove('hidden');
+                copyBuilderSocialToDirect();
                 setDirectPromptFromText(fullPrompt);
                 await savePromptHistory(fullPrompt);
                 showToast('Magic prompt ready!', 'success');
@@ -493,12 +648,14 @@
             const color = document.getElementById('colors').value.trim();
             const cam = document.getElementById('camera').value.trim();
             const tech = document.getElementById('technical').value.trim();
+            const socialContext = getSocialPromptContext('builder');
 
-            const fullPrompt = buildCreativeMasterPrompt({ subject, activity, location, style, light, mood, color, cam, tech });
+            const fullPrompt = buildCreativeMasterPrompt({ subject, activity, location, style, light, mood, color, cam, tech, socialContext });
 
             document.getElementById('resultPrompt').value = fullPrompt;
             window.currentPrompt = fullPrompt;
             document.getElementById('outputContainer').classList.remove('hidden');
+            copyBuilderSocialToDirect();
             setDirectPromptFromText(fullPrompt);
             savePromptHistory(fullPrompt);
         });
@@ -519,7 +676,9 @@
             const parsedDirect = splitPromptSections(directText);
             const prompt = parsedDirect.prompt;
             const negative = document.getElementById('directNegative').value.trim() || parsedDirect.negative;
-            const aspectRatio = getSelectedAspectRatio();
+            const socialContext = getSocialPromptContext('direct');
+            const finalPrompt = buildPromptWithSocialContext(prompt, socialContext);
+            const aspectRatio = socialContext.aspectRatio || getSelectedAspectRatio();
             const size = getGenerationSize(aspectRatio);
             const count = Math.min(Math.max(parseInt(document.getElementById('directCount').value, 10) || 1, 1), 5);
             const btn = document.getElementById('btnDirectGenerate');
@@ -529,7 +688,7 @@
             btn.disabled = true;
             btn.innerHTML = `<i class="ti ti-loader animate-spin"></i> Queue 0/${count}`;
 
-            const historyPrompt = negative ? `${prompt}\n\nNEGATIVE:\n${negative}` : prompt;
+            const historyPrompt = negative ? `${finalPrompt}\n\nNEGATIVE:\n${negative}` : finalPrompt;
             let historyPromise = null;
             let completed = 0;
             let successCount = 0;
@@ -557,7 +716,7 @@
                 setResultCardStatus(card, 'generating', `Generating ${index + 1}/${count}`);
 
                 try {
-                    const result = await requestSingleImage(prompt, negative, size, aspectRatio);
+                    const result = await requestSingleImage(finalPrompt, negative, size, aspectRatio);
                     const image = result.image;
                     const historyId = await ensureHistorySaved(image.imageUrl);
 
@@ -956,18 +1115,37 @@
         background: #1e293b;
         color: #3b82f6;
     }
-    .gallery-item {
-        position: relative;
-        border-radius: 1.5rem;
-        overflow: hidden;
-        background: #020617;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        transition: all 0.5s ease;
+    .studio-tab-list {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
-    .gallery-item:hover { transform: translateY(-5px); border-color: #3b82f6; }
+    .studio-tab-list::-webkit-scrollbar { display: none; }
+    .gallery-item {
+        isolation: isolate;
+        position: relative;
+        border-radius: 1rem;
+        overflow: hidden;
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.98));
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.22);
+        transition: transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+    }
+    .gallery-item:hover {
+        transform: translateY(-4px);
+        border-color: rgba(59, 130, 246, 0.72);
+        box-shadow: 0 22px 70px rgba(15, 23, 42, 0.46);
+    }
     .result-preview-frame {
         aspect-ratio: var(--result-aspect-ratio, 1 / 1);
         min-height: 12rem;
+    }
+    .result-status {
+        background:
+            linear-gradient(180deg, rgba(2, 6, 23, 0.52), rgba(2, 6, 23, 0.9)),
+            repeating-linear-gradient(135deg, rgba(148, 163, 184, 0.05) 0 1px, transparent 1px 10px);
+    }
+    .result-actions {
+        opacity: 0.94;
     }
     .result-action-btn,
     .modal-icon-btn {
@@ -998,6 +1176,25 @@
         border-color: rgba(100, 116, 139, 0.16);
     }
     .gallery-overlay { background: linear-gradient(to top, rgba(2, 6, 23, 0.98) 0%, rgba(2, 6, 23, 0.4) 100%); }
+    @media (max-width: 640px) {
+        .studio-tab {
+            min-width: max-content;
+            padding-left: 0.85rem;
+            padding-right: 0.85rem;
+        }
+        .result-preview-frame {
+            min-height: 15rem;
+        }
+        .result-action-btn,
+        .modal-icon-btn {
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 0.65rem;
+        }
+        #galleryGrid {
+            gap: 1rem;
+        }
+    }
     select {
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
         background-position: right 1rem center;
