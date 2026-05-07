@@ -2412,6 +2412,19 @@
       }
     }
 
+    let streamSyncRefreshTimer = null;
+    function handleStreamSyncEvent(data) {
+      if (data && data.streamId && data.status) {
+        updateStreamStatusUI(data.streamId, data.status);
+      }
+
+      clearTimeout(streamSyncRefreshTimer);
+      streamSyncRefreshTimer = setTimeout(() => {
+        refreshStreamsView();
+      }, 150);
+    }
+    window.handleStreamSyncEvent = handleStreamSyncEvent;
+
     function fetchStreams(page = 1, limit = 10, search = '') {
       currentPage = page;
       currentLimit = limit;

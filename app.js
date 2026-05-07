@@ -134,7 +134,7 @@ app.locals.helpers = {
     return `${hours}:${minutes}:${secs}`;
   }
 };
-app.use(session({
+const sessionMiddleware = session({
   store: new SQLiteStore({
     db: 'sessions.db',
     dir: path.join(__dirname, 'db'),
@@ -149,7 +149,9 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     maxAge: 24 * 60 * 60 * 1000
   }
-}));
+});
+
+app.use(sessionMiddleware);
 function isImageFile(filepath) {
   if (!filepath) return false;
   const ext = path.extname(filepath).toLowerCase();
@@ -5222,6 +5224,13 @@ app.delete('/api/ai/prompt-history/:id', isAuthenticated, async (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
+io.engine.use(sessionMiddleware);
+io.on('connection', (socket) => {
+  const userId = socket.request.session?.userId;
+  if (userId) {
+    socket.join(`user:${userId}`);
+  }
+});
 global.io = io;
 streamingService.setSocketIo(io);
 

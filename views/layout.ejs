@@ -902,15 +902,36 @@
 <!-- Real-Time Auto-Sync Script -->
 <script src="/assets/socket.io/socket.io.js"></script>
 <script>
-  if (typeof io !== 'undefined') {
-    window.appSocket = io();
-    window.appSocket.on('streamStatusUpdate', (data) => {
-      console.log('Stream status update received via Socket.io:', data);
-      if (typeof updateStreamStatusUI === 'function') {
-        updateStreamStatusUI(data.streamId, data.status);
-      } else if (typeof refreshStreamsView === 'function') {
+  (function initRealtimeAutoSync() {
+    if (typeof io === 'undefined') return;
+
+    window.appSocket = window.appSocket || io();
+    let dashboardRefreshTimer = null;
+
+    function scheduleDashboardRefresh() {
+      if (typeof refreshStreamsView !== 'function') return;
+      clearTimeout(dashboardRefreshTimer);
+      dashboardRefreshTimer = setTimeout(() => {
         refreshStreamsView();
+      }, 150);
+    }
+
+    function handleStreamSync(data) {
+      console.log('Stream sync update received via Socket.io:', data);
+
+      if (typeof handleStreamSyncEvent === 'function') {
+        handleStreamSyncEvent(data);
+        return;
       }
-    });
-  }
+
+      if (data && data.streamId && data.status && typeof updateStreamStatusUI === 'function') {
+        updateStreamStatusUI(data.streamId, data.status);
+      }
+
+      scheduleDashboardRefresh();
+    }
+
+    window.appSocket.on('streamsChanged', handleStreamSync);
+    window.appSocket.on('streamStatusUpdate', handleStreamSync);
+  })();
 </script>

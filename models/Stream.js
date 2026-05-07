@@ -1,5 +1,28 @@
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/database');
+
+function emitStreamChange(type, payload = {}) {
+  const io = global.io;
+  if (!io) return;
+
+  const stream = payload.stream || null;
+  const userId = payload.userId || payload.user_id || stream?.user_id || null;
+  const event = {
+    type,
+    streamId: payload.streamId || payload.id || stream?.id || null,
+    status: payload.status || stream?.status || null,
+    stream: stream || undefined,
+    timestamp: new Date().toISOString()
+  };
+
+  const target = userId ? io.to(`user:${userId}`) : io;
+  target.emit('streamsChanged', event);
+
+  if (event.streamId && event.status) {
+    target.emit('streamStatusUpdate', event);
+  }
+}
+
 class Stream {
   static create(streamData) {
     const id = uuidv4();
@@ -57,7 +80,9 @@ class Stream {
             console.error('Error creating stream:', err.message);
             return reject(err);
           }
-          resolve({ id, ...streamData, status: final_status, status_updated_at });
+          const createdStream = { id, ...streamData, status: final_status, status_updated_at };
+          emitStreamChange('created', { stream: createdStream });
+          resolve(createdStream);
         }
       );
     });
@@ -273,7 +298,25 @@ class Stream {
           console.error('Error updating stream:', err.message);
           return reject(err);
         }
-        resolve({ id, ...streamData });
+        const updatedStream = { id, ...streamData };
+
+        if (this.changes > 0) {
+          db.get('SELECT user_id, status FROM streams WHERE id = ?', [id], (fetchErr, row) => {
+            if (fetchErr) {
+              console.error('Error loading updated stream for sync:', fetchErr.message);
+            } else if (row) {
+              emitStreamChange('updated', {
+                streamId: id,
+                status: row.status,
+                userId: row.user_id
+              });
+            }
+            resolve(updatedStream);
+          });
+          return;
+        }
+
+        resolve(updatedStream);
       });
     });
   }
@@ -287,7 +330,11 @@ class Stream {
             console.error('Error deleting stream:', err.message);
             return reject(err);
           }
-          resolve({ success: true, deleted: this.changes > 0 });
+          const deleted = this.changes > 0;
+          if (deleted) {
+            emitStreamChange('deleted', { streamId: id, userId });
+          }
+          resolve({ success: true, deleted });
         }
       );
     });
@@ -348,12 +395,28 @@ class Stream {
             console.error('Error updating stream status:', err.message);
             return reject(err);
           }
-          resolve({
+          const result = {
             id,
             status,
             status_updated_at,
             updated: this.changes > 0
-          });
+          };
+
+          if (result.updated) {
+            if (userId) {
+              emitStreamChange('status', { streamId: id, status, userId });
+            } else {
+              db.get('SELECT user_id FROM streams WHERE id = ?', [id], (fetchErr, row) => {
+                if (fetchErr) {
+                  console.error('Error loading stream user for status sync:', fetchErr.message);
+                } else if (row) {
+                  emitStreamChange('status', { streamId: id, status, userId: row.user_id });
+                }
+              });
+            }
+          }
+
+          resolve(result);
         }
       );
     });
@@ -390,7 +453,15 @@ class Stream {
             console.error('Error clearing schedule fields:', err.message);
             return reject(err);
           }
-          if (global.io) { global.io.emit('streamStatusUpdate', { streamId: id, status: status }); }
+          if (this.changes > 0) {
+            db.get('SELECT user_id, status FROM streams WHERE id = ?', [id], (fetchErr, row) => {
+              if (fetchErr) {
+                console.error('Error loading stream after clearing schedule:', fetchErr.message);
+              } else if (row) {
+                emitStreamChange('updated', { streamId: id, status: row.status, userId: row.user_id });
+              }
+            });
+          }
           resolve({ id, updated: this.changes > 0 });
         }
       );
